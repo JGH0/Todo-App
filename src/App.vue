@@ -19,49 +19,10 @@
 
       <button class="settings">Settings</button>
     </aside>
-
-    <main class="content">
-      <div class="window-head">
-        <span>Main Todo</span>
-        <button class="close-btn">x</button>
-      </div>
-
-      <section class="card">
-        <div class="row">
-          <label for="task-title">Aufgabe erstellen</label>
-          <input id="task-title" type="text" placeholder="Einkaufen" />
-        </div>
-
-        <div class="row toggles">
-          <label><input type="checkbox" /> Sync</label>
-          <label><input type="checkbox" /> Erinnerung</label>
-          <label><input type="checkbox" /> Wiederholen</label>
-        </div>
-
-        <div class="row">
-          <label>Kategorie</label>
-          <div class="chips">
-            <button class="chip active">Freizeit</button>
-            <button class="chip">Alltag</button>
-            <button class="chip">Schule</button>
-          </div>
-        </div>
-
-        <div class="row two-col">
-          <div>
-            <label for="task-date">Datum</label>
-            <input id="task-date" type="date" />
-          </div>
-          <div>
-            <label for="task-time">Zeit</label>
-            <input id="task-time" type="time" />
-          </div>
-        </div>
-
-        <button class="save-btn">Save</button>
-      </section>
-    </main>
   </div>
+    <div class="content">
+	
+    </div>
 </template>
 
 <style scoped>
