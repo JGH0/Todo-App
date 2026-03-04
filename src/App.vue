@@ -1,13 +1,17 @@
+<script setup>
+import { RouterLink, RouterView } from 'vue-router'
+</script>
+
 <template>
   <div class="app-shell">
     <aside class="sidebar">
-      <div class="user">User XY</div>
+      <div class="user">Todo Assistant</div>
 
       <nav class="top-links">
-        <button class="nav-btn">+ Add a Task</button>
-        <button class="nav-btn">Search</button>
-        <button class="nav-btn">Filters</button>
-        <button class="nav-btn">Ask AI</button>
+        <RouterLink class="nav-btn" to="/">+ Add a Task</RouterLink>
+        <RouterLink class="nav-btn" to="/">Search</RouterLink>
+        <RouterLink class="nav-btn" to="/">Filters</RouterLink>
+        <RouterLink class="nav-btn" to="/ai-assistant">Ask AI</RouterLink>
       </nav>
 
       <div class="section-title">Favorites</div>
@@ -21,45 +25,7 @@
     </aside>
 
     <main class="content">
-      <div class="window-head">
-        <span>Main Todo</span>
-        <button class="close-btn">x</button>
-      </div>
-
-      <section class="card">
-        <div class="row">
-          <label for="task-title">Aufgabe erstellen</label>
-          <input id="task-title" type="text" placeholder="Einkaufen" />
-        </div>
-
-        <div class="row toggles">
-          <label><input type="checkbox" /> Sync</label>
-          <label><input type="checkbox" /> Erinnerung</label>
-          <label><input type="checkbox" /> Wiederholen</label>
-        </div>
-
-        <div class="row">
-          <label>Kategorie</label>
-          <div class="chips">
-            <button class="chip active">Freizeit</button>
-            <button class="chip">Alltag</button>
-            <button class="chip">Schule</button>
-          </div>
-        </div>
-
-        <div class="row two-col">
-          <div>
-            <label for="task-date">Datum</label>
-            <input id="task-date" type="date" />
-          </div>
-          <div>
-            <label for="task-time">Zeit</label>
-            <input id="task-time" type="time" />
-          </div>
-        </div>
-
-        <button class="save-btn">Save</button>
-      </section>
+      <RouterView />
     </main>
   </div>
 </template>
@@ -100,6 +66,8 @@
   padding: 6px 0;
   color: #333;
   cursor: pointer;
+  text-decoration: none;
+  font-size: 14px;
 }
 
 .section-title {
