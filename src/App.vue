@@ -3,190 +3,247 @@ import { RouterLink, RouterView } from 'vue-router'
 </script>
 
 <template>
-  <div class="app-shell">
-    <aside class="sidebar">
-      <div class="user">Todo Assistant</div>
+	<div class="app-shell">
+		<!-- Mobile Header -->
+		<header class="mobile-header">
+			<button class="hamburger" @click="sidebarOpen = true">
+				☰
+			</button>
+			<span class="mobile-title">{{ currentView }}</span>
+		</header>
 
-      <nav class="top-links">
-        <RouterLink class="nav-btn" to="/">+ Add a Task</RouterLink>
-        <RouterLink class="nav-btn" to="/">Search</RouterLink>
-        <RouterLink class="nav-btn" to="/">Filters</RouterLink>
-        <RouterLink class="nav-btn" to="/ai-assistant">Ask AI</RouterLink>
-      </nav>
+		<!-- Mobile Backdrop -->
+		<div
+			v-if="sidebarOpen"
+			class="backdrop"
+			@click="sidebarOpen = false"
+		/>
 
-      <div class="section-title">Favorites</div>
-      <ul class="list">
-        <li>Work</li>
-        <li>Home</li>
-        <li>Personal</li>
-      </ul>
+		<!-- Sidebar -->
+		<aside
+			class="sidebar"
+			:class="{ open: sidebarOpen }"
+			@click.stop
+		>
+			<div class="user">User XY</div>
 
-      <button class="settings">Settings</button>
-    </aside>
+			<nav class="top-links">
+				<button class="nav-btn" @click="setView('addTask')">+ Add a Task</button>
+				<button class="nav-btn" @click="setView('search')">Search</button>
+				<button class="nav-btn" @click="setView('filters')">Filters</button>
+				<button class="nav-btn" @click="setView('askAi')">Ask AI</button>
+			</nav>
 
-    <main class="content">
-      <RouterView />
-    </main>
-  </div>
+			<div class="section-title">Favorites</div>
+			<ul class="list">
+				<li @click="setView('work')">Work</li>
+				<li @click="setView('home')">Home</li>
+				<li @click="setView('personal')">Personal</li>
+			</ul>
+
+			<button class="settings" @click="setView('settings')">
+				Settings
+			</button>
+		</aside>
+
+		<!-- Content -->
+		<main class="content">
+			<component :is="currentComponent" />
+		</main>
+	</div>
 </template>
 
-<style scoped>
-.app-shell {
-  min-height: 100vh;
-  display: grid;
-  grid-template-columns: 250px 1fr;
-  background: #f5f5f5;
-  color: #222;
+<script>
+import SettingsView from '@/views/SettingsView.vue'
+
+const SimpleView = {
+	props: ['title'],
+	template: `
+		<div class="card">
+			<h2>{{ title }}</h2>
+			<p>This is the {{ title }} view.</p>
+		</div>
+	`
 }
 
+export default {
+	components: {
+		SettingsView,
+		AddTaskView: { components: { SimpleView }, template: `<SimpleView title="Add Task" />` },
+		SearchView: { components: { SimpleView }, template: `<SimpleView title="Search" />` },
+		FiltersView: { components: { SimpleView }, template: `<SimpleView title="Filters" />` },
+		AskAiView: { components: { SimpleView }, template: `<SimpleView title="Ask AI" />` },
+		WorkView: { components: { SimpleView }, template: `<SimpleView title="Work" />` },
+		HomeView: { components: { SimpleView }, template: `<SimpleView title="Home" />` },
+		PersonalView: { components: { SimpleView }, template: `<SimpleView title="Personal" />` }
+	},
+
+	data() {
+		return {
+			currentView: 'settings',
+			sidebarOpen: false
+		}
+	},
+
+	computed: {
+		currentComponent() {
+			const views = {
+				settings: 'SettingsView',
+				addTask: 'AddTaskView',
+				search: 'SearchView',
+				filters: 'FiltersView',
+				askAi: 'AskAiView',
+				work: 'WorkView',
+				home: 'HomeView',
+				personal: 'PersonalView'
+			}
+
+			return views[this.currentView]
+		}
+	},
+
+	methods: {
+		setView(view) {
+			this.currentView = view
+			this.sidebarOpen = false
+		}
+	}
+}
+</script>
+
+<style scoped>
+/* Layout */
+.app-shell {
+	min-height: 100vh;
+	display: grid;
+	grid-template-columns: 250px 1fr;
+	background: #f5f5f5;
+	color: #1f1f1f;
+}
+
+/* Sidebar */
 .sidebar {
-  border-right: 1px solid #d9d9d9;
-  padding: 20px 16px;
-  background: #fff;
+	background: #ffffff;
+	border-right: 1px solid #d0d0d0;
+	padding: 20px 16px;
+	z-index: 20;
 }
 
 .user {
-  font-size: 20px;
-  font-weight: 600;
-  margin-bottom: 18px;
+	font-size: 20px;
+	font-weight: 600;
+	color: #111;
+	margin-bottom: 18px;
 }
 
 .top-links {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 18px;
+	display: flex;
+	flex-direction: column;
+	gap: 8px;
 }
 
 .nav-btn,
 .settings {
-  background: transparent;
-  border: 0;
-  text-align: left;
-  padding: 6px 0;
-  color: #333;
-  cursor: pointer;
-  text-decoration: none;
-  font-size: 14px;
+	background: transparent;
+	border: 0;
+	padding: 6px 0;
+	text-align: left;
+	cursor: pointer;
+	color: #222;
+	font-weight: 500;
+}
+
+.nav-btn:hover,
+.list li:hover,
+.settings:hover {
+	color: #000;
 }
 
 .section-title {
-  border-top: 1px solid #e0e0e0;
-  padding-top: 12px;
-  margin-top: 10px;
-  font-weight: 600;
+	border-top: 1px solid #ddd;
+	padding-top: 12px;
+	margin-top: 14px;
+	font-weight: 600;
+	color: #222;
 }
 
 .list {
-  margin: 10px 0 14px;
-  padding: 0;
-  list-style: none;
+	list-style: none;
+	padding: 0;
+	margin: 10px 0 14px;
 }
 
 .list li {
-  padding: 6px 0;
+	padding: 6px 0;
+	cursor: pointer;
+	color: #222;
 }
 
+/* Content */
 .content {
-  padding: 20px;
-}
-
-.window-head {
-  display: flex;
-  justify-content: space-between;
-  align-items: center;
-  margin-bottom: 10px;
-}
-
-.close-btn {
-  border: 1px solid #bbb;
-  background: #fff;
-  width: 28px;
-  height: 28px;
-  cursor: pointer;
+	padding: 20px;
 }
 
 .card {
-  background: #fff;
-  border: 1px solid #d9d9d9;
-  padding: 18px;
-  width: 100%;
+	background: #fff;
+	border: 1px solid #d9d9d9;
+	padding: 18px;
 }
 
-.row {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  margin-bottom: 18px;
+/* Mobile Header */
+.mobile-header {
+	display: none;
+	align-items: center;
+	gap: 12px;
+	padding: 12px 16px;
+	background: #fff;
+	border-bottom: 1px solid #d0d0d0;
+	grid-column: 1 / -1;
 }
 
-.row label {
-  font-weight: 600;
+.hamburger {
+	font-size: 22px;
+	background: none;
+	border: 0;
+	cursor: pointer;
+	color: #111;
 }
 
-input {
-  border: 1px solid #cfcfcf;
-  background: #fff;
-  padding: 10px;
-  font-size: 14px;
+/* Backdrop */
+.backdrop {
+	position: fixed;
+	inset: 0;
+	background: rgba(0, 0, 0, 0.25);
+	z-index: 10;
 }
 
-.toggles {
-  flex-direction: row;
-  gap: 24px;
-  flex-wrap: wrap;
-}
-
-.toggles label {
-  font-weight: 500;
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-
-.chips {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 10px;
-}
-
-.chip {
-  border: 1px solid #cfcfcf;
-  background: #fff;
-  padding: 8px 12px;
-  cursor: pointer;
-}
-
-.chip.active {
-  border-color: #555;
-}
-
-.two-col {
-  display: grid;
-  grid-template-columns: 1fr 1fr;
-  gap: 20px;
-}
-
-.save-btn {
-  border: 1px solid #bbb;
-  background: #f3f3f3;
-  border-radius: 18px;
-  padding: 9px 22px;
-  cursor: pointer;
-}
-
+/* Mobile */
 @media (max-width: 900px) {
-  .app-shell {
-    grid-template-columns: 1fr;
-  }
+	.app-shell {
+		grid-template-columns: 1fr;
+		grid-template-rows: auto 1fr;
+	}
 
-  .sidebar {
-    border-right: 0;
-    border-bottom: 1px solid #d9d9d9;
-  }
+	.mobile-header {
+		display: flex;
+	}
 
-  .two-col {
-    grid-template-columns: 1fr;
-  }
+	.sidebar {
+		position: fixed;
+		top: 52px;
+		left: 0;
+		right: 0;
+		border-right: 0;
+		border-bottom: 1px solid #d0d0d0;
+		display: none;
+	}
+
+	.sidebar.open {
+		display: block;
+	}
+
+	.content {
+		padding-top: 16px;
+	}
 }
 </style>
