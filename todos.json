@@ -1,0 +1,24 @@
+{
+  "todos": [
+    {
+      "title": "Hausaufgaben erledigen",
+      "completed": true,
+      "id": 1
+    },
+    {
+      "title": "Pflanzen giessen",
+      "completed": false,
+      "id": 2
+    },
+    {
+      "title": "Vue.js lernen",
+      "completed": false,
+      "id": 3
+    },
+    {
+      "title": "Pause machen",
+      "completed": false,
+      "id": 4
+    }
+  ]
+}

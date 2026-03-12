@@ -1,3 +1,7 @@
+<script setup>
+import { RouterLink, RouterView } from 'vue-router'
+</script>
+
 <template>
 	<div class="app-shell">
 		<!-- Mobile Header -->
@@ -51,6 +55,7 @@
 
 <script>
 import SettingsView from '@/views/SettingsView.vue'
+import AiAssistantView from './views/AiAssistantView.vue';
 
 const SimpleView = {
 	props: ['title'],
@@ -68,7 +73,7 @@ export default {
 		AddTaskView: { components: { SimpleView }, template: `<SimpleView title="Add Task" />` },
 		SearchView: { components: { SimpleView }, template: `<SimpleView title="Search" />` },
 		FiltersView: { components: { SimpleView }, template: `<SimpleView title="Filters" />` },
-		AskAiView: { components: { SimpleView }, template: `<SimpleView title="Ask AI" />` },
+		AiAssistantView,
 		WorkView: { components: { SimpleView }, template: `<SimpleView title="Work" />` },
 		HomeView: { components: { SimpleView }, template: `<SimpleView title="Home" />` },
 		PersonalView: { components: { SimpleView }, template: `<SimpleView title="Personal" />` }
@@ -88,7 +93,7 @@ export default {
 				addTask: 'AddTaskView',
 				search: 'SearchView',
 				filters: 'FiltersView',
-				askAi: 'AskAiView',
+				askAi: 'AiAssistantView',
 				work: 'WorkView',
 				home: 'HomeView',
 				personal: 'PersonalView'
