@@ -36,9 +36,9 @@ import { RouterLink, RouterView } from 'vue-router'
 
 			<div class="section-title">Favorites</div>
 			<ul class="list">
-				<li @click="setView('work')">Work</li>
-				<li @click="setView('home')">Home</li>
-				<li @click="setView('personal')">Personal</li>
+				<li v-for="fav in favorites" :key="fav" @click="setView(fav.toLowerCase())">
+					{{ fav }}
+				</li>
 			</ul>
 
 			<button class="settings" @click="setView('settings')">
@@ -82,7 +82,8 @@ export default {
 	data() {
 		return {
 			currentView: 'settings',
-			sidebarOpen: false
+			sidebarOpen: false,
+			favorites: ['work', 'home', 'personal']
 		}
 	},
 
