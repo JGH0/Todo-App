@@ -32,12 +32,13 @@ import { RouterLink, RouterView } from 'vue-router'
 				<button class="nav-btn" @click="setView('search')">Search</button>
 				<button class="nav-btn" @click="setView('filters')">Filters</button>
 				<button class="nav-btn" @click="setView('askAi')">Ask AI</button>
+				<button class="nav-btn" @click="setView('todos')">All Todos</button>
 			</nav>
 
 			<div class="section-title">Favorites</div>
 			<ul class="list">
-				<li v-for="fav in favorites" :key="fav" @click="setView(fav.toLowerCase())">
-					{{ fav }}
+				<li v-for="fav in favorites" :key="fav" @click="setView(fav)">
+					{{ fav.charAt(0).toUpperCase() + fav.slice(1) }}
 				</li>
 			</ul>
 
@@ -48,14 +49,16 @@ import { RouterLink, RouterView } from 'vue-router'
 
 		<!-- Content -->
 		<main class="content">
-			<component :is="currentComponent" />
+			<component :is="currentComponent" :category="currentCategory" />
 		</main>
 	</div>
 </template>
 
 <script>
 import SettingsView from '@/views/SettingsView.vue'
-import AiAssistantView from './views/AiAssistantView.vue';
+import AiAssistantView from './views/AiAssistantView.vue'
+import TodoCreateForm from './views/TodoCreateForm.vue'
+import TodosListView from './views/TodosListView.vue' // <-- new
 
 const SimpleView = {
 	props: ['title'],
@@ -70,20 +73,20 @@ const SimpleView = {
 export default {
 	components: {
 		SettingsView,
-		AddTaskView: { components: { SimpleView }, template: `<SimpleView title="Add Task" />` },
+		TodoCreateForm,
+		TodosListView, // <-- register
 		SearchView: { components: { SimpleView }, template: `<SimpleView title="Search" />` },
 		FiltersView: { components: { SimpleView }, template: `<SimpleView title="Filters" />` },
 		AiAssistantView,
-		WorkView: { components: { SimpleView }, template: `<SimpleView title="Work" />` },
-		HomeView: { components: { SimpleView }, template: `<SimpleView title="Home" />` },
-		PersonalView: { components: { SimpleView }, template: `<SimpleView title="Personal" />` }
+		// WorkView, HomeView, PersonalView removed – now handled by TodosListView with category
 	},
 
 	data() {
 		return {
 			currentView: 'settings',
+			currentCategory: null, // <-- new
 			sidebarOpen: false,
-			favorites: ['work', 'home', 'personal']
+			favorites: ['work', 'home', 'personal'] // lowercase for easy matching
 		}
 	},
 
@@ -91,22 +94,26 @@ export default {
 		currentComponent() {
 			const views = {
 				settings: 'SettingsView',
-				addTask: 'AddTaskView',
+				addTask: 'TodoCreateForm',
 				search: 'SearchView',
 				filters: 'FiltersView',
 				askAi: 'AiAssistantView',
-				work: 'WorkView',
-				home: 'HomeView',
-				personal: 'PersonalView'
+				todos: 'TodosListView' // <-- new
 			}
-
 			return views[this.currentView]
 		}
 	},
 
 	methods: {
 		setView(view) {
-			this.currentView = view
+			// If the view is one of the favorite categories, go to todos with that category
+			if (this.favorites.includes(view)) {
+				this.currentView = 'todos'
+				this.currentCategory = view.charAt(0).toUpperCase() + view.slice(1) // capitalize
+			} else {
+				this.currentView = view
+				this.currentCategory = null
+			}
 			this.sidebarOpen = false
 		}
 	}
