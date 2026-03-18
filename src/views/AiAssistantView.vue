@@ -1,15 +1,17 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, onBeforeUnmount, onMounted, ref } from 'vue'
+import {
+  AI_SETTINGS_EVENT,
+  AI_SETTINGS_STORAGE_KEY,
+  buildOllamaChatEndpointCandidates,
+  buildOpenAiChatEndpointCandidates,
+  getActiveAiConfig,
+  loadAiSettings,
+  normalizeServerUrl,
+} from '@/utils/aiSettings'
 
-const serverUrl = ref('')
-const apiKey = ref('')
-const models = ref([])
-const selectedModel = ref('')
-const useSecondModel = ref(false)
-const secondaryModel = ref('')
-const modelsLoading = ref(false)
+const aiSettings = ref(loadAiSettings())
 const sending = ref(false)
-const connectionStatus = ref('Not connected')
 
 const taskDraft = ref({
   title: '',
@@ -28,12 +30,44 @@ const chatInput = ref('')
 const chatMessages = ref([
   {
     role: 'assistant',
-    content:
-      'Configure Open-WebUI URL + your API key, then load models. Aya:8b and Deepseek:8b will appear if available on the server.',
+    content: 'Hello, I am your AI Assistant. I am ready to help you out :)',
   },
 ])
 
+const activeConfig = computed(() => getActiveAiConfig(aiSettings.value))
+const activeServerUrl = computed(() => normalizeServerUrl(activeConfig.value.serverUrl))
+const activeApiBaseUrl = computed(() => normalizeServerUrl(activeConfig.value.requestBaseUrl))
+const selectedModel = computed(() => aiSettings.value.primaryModel || '')
+const useSecondModel = computed(() => aiSettings.value.useSecondModel)
+const secondaryModel = computed(() => aiSettings.value.secondaryModel || '')
+
 const selectedTask = computed(() => tasks.value.find((task) => task.id === selectedTaskId.value) ?? null)
+
+function refreshAiSettings() {
+  aiSettings.value = loadAiSettings()
+}
+
+function handleStorageChange(event) {
+  if (!event || !event.key || event.key === AI_SETTINGS_STORAGE_KEY) {
+    refreshAiSettings()
+  }
+}
+
+onMounted(() => {
+  refreshAiSettings()
+
+  if (typeof window === 'undefined') return
+
+  window.addEventListener(AI_SETTINGS_EVENT, refreshAiSettings)
+  window.addEventListener('storage', handleStorageChange)
+})
+
+onBeforeUnmount(() => {
+  if (typeof window === 'undefined') return
+
+  window.removeEventListener(AI_SETTINGS_EVENT, refreshAiSettings)
+  window.removeEventListener('storage', handleStorageChange)
+})
 
 function syncDraftWithSelectedTask() {
   if (!selectedTask.value) return
@@ -109,88 +143,36 @@ function getLocalAdvice() {
   return `Focus on these next steps:\n${topThree}`
 }
 
-function normalizeBaseUrl() {
-  return serverUrl.value.trim().replace(/\/$/, '')
-}
+async function requestJson(urls, options = {}) {
+  let lastError = null
 
-async function requestJson(path, options = {}) {
-  const response = await fetch(`${normalizeBaseUrl()}${path}`, options)
-  if (!response.ok) {
-    const raw = await response.text()
-    throw new Error(raw || `HTTP ${response.status}`)
+  for (const url of urls) {
+    try {
+      const response = await fetch(url, options)
+      if (!response.ok) {
+        const raw = await response.text()
+        throw new Error(raw || `HTTP ${response.status}`)
+      }
+
+      return response.json()
+    } catch (error) {
+      lastError = error
+    }
   }
-  return response.json()
+
+  throw lastError || new Error(`No chat endpoint could be reached from ${activeApiBaseUrl.value}`)
 }
 
 function authHeaders() {
-  return {
-    Authorization: `Bearer ${apiKey.value.trim()}`,
+  const headers = {
     'Content-Type': 'application/json',
   }
-}
 
-function parseModels(payload) {
-  const candidate = Array.isArray(payload) ? payload : payload?.data || payload?.models || []
-  if (!Array.isArray(candidate)) return []
-
-  return candidate
-    .map((item) => {
-      if (typeof item === 'string') return { id: item, label: item }
-      return {
-        id: item.id || item.model || item.name,
-        label: item.name || item.id || item.model,
-      }
-    })
-    .filter((item) => item.id)
-}
-
-async function loadModels() {
-  if (!normalizeBaseUrl() || !apiKey.value.trim()) {
-    connectionStatus.value = 'Enter server URL and API key first.'
-    return
+  if (activeConfig.value.apiKey) {
+    headers.Authorization = `Bearer ${activeConfig.value.apiKey}`
   }
 
-  modelsLoading.value = true
-  connectionStatus.value = 'Loading models...'
-
-  try {
-    let payload
-    try {
-      payload = await requestJson('/api/models', {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${apiKey.value.trim()}` },
-      })
-    } catch {
-      payload = await requestJson('/v1/models', {
-        method: 'GET',
-        headers: { Authorization: `Bearer ${apiKey.value.trim()}` },
-      })
-    }
-
-    models.value = parseModels(payload)
-
-    if (!models.value.length) {
-      connectionStatus.value = 'Connected, but no models returned.'
-      return
-    }
-
-    if (!models.value.some((model) => model.id === selectedModel.value)) {
-      const preferred = models.value.find((model) => /aya/i.test(model.id))
-      selectedModel.value = preferred?.id || models.value[0].id
-    }
-
-    if (!models.value.some((model) => model.id === secondaryModel.value)) {
-      const fallback = models.value.find((model) => model.id !== selectedModel.value)
-      secondaryModel.value = fallback?.id || selectedModel.value
-    }
-
-    connectionStatus.value = `Connected. Loaded ${models.value.length} model(s).`
-  } catch (error) {
-    connectionStatus.value = `Connection failed: ${error.message}`
-    models.value = []
-  } finally {
-    modelsLoading.value = false
-  }
+  return headers
 }
 
 function buildPlannerPrompt(userText) {
@@ -223,33 +205,40 @@ function extractJsonObject(text) {
 }
 
 async function runChatCompletion(modelId, userText) {
-  const body = {
+  const messages = [
+    { role: 'system', content: 'Return only valid JSON object.' },
+    { role: 'user', content: buildPlannerPrompt(userText) },
+  ]
+
+  const openAiCompatibleBody = {
     model: modelId,
-    messages: [
-      { role: 'system', content: 'Return only valid JSON object.' },
-      { role: 'user', content: buildPlannerPrompt(userText) },
-    ],
+    messages,
     stream: false,
     temperature: 0.2,
   }
 
-  let payload
   try {
-    payload = await requestJson('/api/chat/completions', {
+    const payload = await requestJson(buildOpenAiChatEndpointCandidates(activeApiBaseUrl.value), {
       method: 'POST',
       headers: authHeaders(),
-      body: JSON.stringify(body),
+      body: JSON.stringify(openAiCompatibleBody),
     })
-  } catch {
-    payload = await requestJson('/v1/chat/completions', {
-      method: 'POST',
-      headers: authHeaders(),
-      body: JSON.stringify(body),
-    })
-  }
 
-  const content = payload?.choices?.[0]?.message?.content || ''
-  return extractJsonObject(content)
+    return extractJsonObject(payload?.choices?.[0]?.message?.content || '')
+  } catch {
+    const payload = await requestJson(buildOllamaChatEndpointCandidates(activeApiBaseUrl.value), {
+      method: 'POST',
+      headers: authHeaders(),
+      body: JSON.stringify({
+        model: modelId,
+        messages,
+        stream: false,
+        options: { temperature: 0.2 },
+      }),
+    })
+
+    return extractJsonObject(payload?.message?.content || '')
+  }
 }
 
 function mergePlans(primary, secondary) {
@@ -319,13 +308,21 @@ async function sendMessage() {
   const text = chatInput.value.trim()
   if (!text || sending.value) return
 
-  if (!normalizeBaseUrl() || !apiKey.value.trim()) {
-    chatMessages.value.push({ role: 'assistant', content: 'Please enter server URL and your API key first.' })
+  refreshAiSettings()
+
+  if (!activeApiBaseUrl.value) {
+    chatMessages.value.push({
+      role: 'assistant',
+      content: 'Please configure an active AI server or API base URL in Settings before proceeding.',
+    })
     return
   }
 
   if (!selectedModel.value) {
-    chatMessages.value.push({ role: 'assistant', content: 'Please load models from the server and select one model.' })
+    chatMessages.value.push({
+      role: 'assistant',
+      content: 'Please load models and choose a primary model in Settings before proceeding.',
+    })
     return
   }
 
@@ -358,92 +355,30 @@ syncDraftWithSelectedTask()
   <section class="assistant-page">
     <header class="assistant-head">
       <h1>AI Task Assistant</h1>
-      <p>Uses your Open-WebUI server. Model options are fetched live from the server each time you load models.</p>
+      <p>Uses the AI server or API base configured in Settings. Auth and model selection are managed there.</p>
     </header>
-
-    <div class="grid">
-      <article class="panel">
-        <h2>Server & Auth</h2>
-        <div class="row">
-          <label for="server-url">Open-WebUI URL</label>
-          <input id="server-url" v-model="serverUrl" type="text" placeholder="http://your-server:3000" />
-        </div>
-        <div class="row">
-          <label for="api-key">Your API key (required)</label>
-          <input id="api-key" v-model="apiKey" type="password" placeholder="Paste your own API key" />
-        </div>
-        <div class="row actions">
-          <button :disabled="modelsLoading" @click="loadModels">{{ modelsLoading ? 'Loading...' : 'Load Models' }}</button>
-          <button :disabled="modelsLoading" @click="loadModels">Refresh</button>
-        </div>
-        <p class="status">{{ connectionStatus }}</p>
-      </article>
-
-      <article class="panel">
-        <h2>Model Setup</h2>
-        <div class="row">
-          <label for="primary-model">Primary model</label>
-          <select id="primary-model" v-model="selectedModel" :disabled="!models.length">
-            <option disabled value="">Select model from server</option>
-            <option v-for="model in models" :key="model.id" :value="model.id">{{ model.label }}</option>
-          </select>
-        </div>
-
-        <label class="check">
-          <input v-model="useSecondModel" type="checkbox" :disabled="models.length < 2" />
-          Combine with second model for higher accuracy
-        </label>
-
-        <div class="row" v-if="useSecondModel">
-          <label for="secondary-model">Second model</label>
-          <select id="secondary-model" v-model="secondaryModel" :disabled="models.length < 2">
-            <option v-for="model in models" :key="`second-${model.id}`" :value="model.id">{{ model.label }}</option>
-          </select>
-        </div>
-      </article>
-
-      <article class="panel">
-        <h2>Task CRUD</h2>
-        <div class="row">
-          <label for="task-select">Selected task</label>
-          <select id="task-select" v-model.number="selectedTaskId" @change="syncDraftWithSelectedTask">
-            <option v-for="task in tasks" :key="task.id" :value="task.id">#{{ task.id }} - {{ task.title }}</option>
-          </select>
-        </div>
-        <div class="row">
-          <label for="task-title">Title</label>
-          <input id="task-title" v-model="taskDraft.title" type="text" placeholder="Write weekly report" />
-        </div>
-        <div class="row two-col">
-          <div>
-            <label for="task-category">Category</label>
-            <input id="task-category" v-model="taskDraft.category" type="text" placeholder="Work" />
-          </div>
-          <div>
-            <label for="task-date">Due date</label>
-            <input id="task-date" v-model="taskDraft.dueDate" type="date" />
-          </div>
-        </div>
-        <div class="row actions">
-          <button @click="chatMessages.push({ role: 'assistant', content: createTaskFromData(taskDraft) })">Create</button>
-          <button @click="chatMessages.push({ role: 'assistant', content: readTasks() })">Read</button>
-          <button
-            @click="chatMessages.push({ role: 'assistant', content: updateTaskFromData({ taskId: selectedTaskId, updates: taskDraft }) })"
-          >
-            Update
-          </button>
-          <button class="danger" @click="chatMessages.push({ role: 'assistant', content: deleteTaskFromData({ taskId: selectedTaskId }) })">
-            Delete
-          </button>
-        </div>
-      </article>
-    </div>
 
     <article class="panel chat">
       <h2>Assistant Chat</h2>
       <p class="hint">
-        Prompts are sent to the selected server model. Example: <code>Create a task to prepare slides for Friday</code>,
+        Prompts are sent to your selected server. Example: <code>Create a task to prepare slides for Friday</code>,
         <code>Zeige alle Aufgaben</code>, <code>Donne-moi un conseil pour aujourd'hui</code>
+      </p>
+      <p class="config-summary">
+        Server:
+        <code>{{ activeServerUrl || 'not configured' }}</code>
+        <span class="config-gap">
+          API:
+          <code>{{ activeApiBaseUrl || 'not configured' }}</code>
+        </span>
+        <span class="config-gap">
+          Primary model:
+          <code v-if="selectedModel">{{ selectedModel }}</code>
+          <span v-else>not selected</span>
+        </span>
+        <span v-if="useSecondModel && secondaryModel && secondaryModel !== selectedModel" class="config-gap">
+          Second model: <code>{{ secondaryModel }}</code>
+        </span>
       </p>
       <div class="messages">
         <div v-for="(message, index) in chatMessages" :key="index" :class="['message', message.role]">
@@ -559,6 +494,15 @@ button {
 .chat .hint {
   color: #555;
   margin-top: 0;
+}
+
+.config-summary {
+  margin: 0 0 12px;
+  color: #555;
+}
+
+.config-gap {
+  margin-left: 12px;
 }
 
 .messages {
