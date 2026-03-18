@@ -1,0 +1,870 @@
+<script setup>
+import { computed, reactive, ref, watch } from 'vue'
+
+const props = defineProps({
+  heading: {
+    type: String,
+    default: 'Neues Todo erstellen',
+  },
+  submitLabel: {
+    type: String,
+    default: 'Todo speichern',
+  },
+  projectId: {
+    type: [String, Number],
+    default: null,
+  },
+  initialStatus: {
+    type: String,
+    default: 'open',
+  },
+  initialCategories: {
+    type: Array,
+    default: () => [],
+  },
+  submitTodo: {
+    type: Function,
+    default: null,
+  },
+})
+
+const emit = defineEmits(['cancel', 'create', 'created'])
+
+const form = reactive({
+  title: '',
+  description: '',
+  status: props.initialStatus,
+  categories: [...props.initialCategories],
+  categoryInput: '',
+  dueDate: '',
+  dueTime: '',
+  syncEnabled: false,
+  reminderEnabled: false,
+  recurringEnabled: false,
+})
+
+const errors = reactive({
+  title: '',
+  dueDate: '',
+  dueTime: '',
+  submit: '',
+})
+
+const isSubmitting = ref(false)
+const normalizedStatus = computed(() => (form.status === 'done' ? 'Erledigt' : 'Offen'))
+
+watch(
+  () => props.initialStatus,
+  (status) => {
+    form.status = status
+  },
+)
+
+watch(
+  () => props.initialCategories,
+  (categories) => {
+    form.categories = [...categories]
+  },
+  { deep: true },
+)
+
+const resetForm = () => {
+  form.title = ''
+  form.description = ''
+  form.status = props.initialStatus
+  form.categories = [...props.initialCategories]
+  form.categoryInput = ''
+  form.dueDate = ''
+  form.dueTime = ''
+  form.syncEnabled = false
+  form.reminderEnabled = false
+  form.recurringEnabled = false
+  errors.title = ''
+  errors.dueDate = ''
+  errors.dueTime = ''
+  errors.submit = ''
+}
+
+const validate = () => {
+  errors.title = form.title.trim() ? '' : 'Bitte gib einen Titel fuer das Todo ein.'
+  errors.dueDate = form.dueTime && !form.dueDate ? 'Waehle ein Datum, wenn du eine Uhrzeit angibst.' : ''
+  errors.dueTime = form.reminderEnabled && !form.dueTime ? 'Fuer eine Erinnerung wird eine Uhrzeit benoetigt.' : ''
+  return !errors.title && !errors.dueDate && !errors.dueTime
+}
+
+const addCategory = () => {
+  const value = form.categoryInput.trim()
+  if (!value || form.categories.includes(value)) {
+    form.categoryInput = ''
+    return
+  }
+
+  form.categories = [...form.categories, value]
+  form.categoryInput = ''
+}
+
+const removeCategory = (categoryToRemove) => {
+  form.categories = form.categories.filter((category) => category !== categoryToRemove)
+}
+
+const toggleStatus = () => {
+  form.status = form.status === 'open' ? 'done' : 'open'
+}
+
+const handleSubmit = async () => {
+  errors.submit = ''
+
+  if (!validate()) {
+    return
+  }
+
+  const payload = {
+    title: form.title,
+    description: form.description,
+    status: form.status,
+    categories: [...form.categories],
+    dueDate: form.dueDate || null,
+    dueTime: form.dueTime || null,
+    syncEnabled: form.syncEnabled,
+    reminderEnabled: form.reminderEnabled,
+    recurringEnabled: form.recurringEnabled,
+    projectId: props.projectId,
+  }
+
+  try {
+    isSubmitting.value = true
+
+    let createdTodo = null
+
+    if (props.submitTodo) {
+      createdTodo = await props.submitTodo(payload)
+    } else {
+      emit('create', payload)
+      createdTodo = payload
+    }
+
+    resetForm()
+    emit('created', createdTodo)
+  } catch (error) {
+    errors.submit = error instanceof Error ? error.message : 'Todo konnte nicht erstellt werden.'
+  } finally {
+    isSubmitting.value = false
+  }
+}
+</script>
+
+<template>
+  <form class="todo-form card" @submit.prevent="handleSubmit" novalidate>
+    <div class="todo-form-header">
+      <button class="icon-button" type="button" aria-label="Formular zuruecksetzen" @click="resetForm">
+        <span aria-hidden="true">✕</span>
+      </button>
+      <div class="todo-form-heading">
+        <p class="eyebrow">Todo Form</p>
+        <h2>{{ heading }}</h2>
+      </div>
+      <button class="icon-button icon-button-primary" type="submit" :disabled="isSubmitting" :aria-label="submitLabel">
+        <span aria-hidden="true">✓</span>
+      </button>
+    </div>
+
+    <div class="todo-form-grid">
+      <section class="todo-form-main">
+        <label class="field field-title">
+          <span class="field-label">Titel *</span>
+          <div class="input-line">
+            <input
+              v-model="form.title"
+              type="text"
+              name="title"
+              placeholder="Einkaufen"
+              :aria-invalid="Boolean(errors.title)"
+            >
+            <button class="inline-icon-button" type="button" aria-label="Status umschalten" @click="toggleStatus">
+              {{ normalizedStatus }}
+            </button>
+          </div>
+          <small v-if="errors.title" class="error">{{ errors.title }}</small>
+        </label>
+
+        <label class="field">
+          <span class="field-label">Beschreibung</span>
+          <textarea
+            v-model="form.description"
+            name="description"
+            rows="4"
+            placeholder="Optional: Details, Notizen oder Akzeptanzkriterien"
+          />
+        </label>
+
+        <section class="field">
+          <span class="field-label">Kategorien</span>
+          <div v-if="form.categories.length" class="category-list">
+            <span v-for="category in form.categories" :key="category" class="category-chip">
+              {{ category }}
+              <button type="button" class="chip-remove" :aria-label="`Kategorie ${category} entfernen`" @click="removeCategory(category)">
+                ✕
+              </button>
+            </span>
+          </div>
+
+          <div class="input-line">
+            <input
+              v-model="form.categoryInput"
+              type="text"
+              name="category"
+              placeholder="Neue Kategorie hinzufuegen"
+              @keydown.enter.prevent="addCategory"
+            >
+            <button class="inline-icon-button" type="button" @click="addCategory">
+              Hinzufuegen
+            </button>
+          </div>
+        </section>
+
+        <div class="todo-form-split">
+          <label class="field">
+            <span class="field-label">Datum</span>
+            <div class="input-line">
+              <input v-model="form.dueDate" type="date" name="dueDate">
+              <span class="inline-icon" aria-hidden="true">📅</span>
+            </div>
+            <small v-if="errors.dueDate" class="error">{{ errors.dueDate }}</small>
+          </label>
+
+          <label class="field">
+            <span class="field-label">Zeit</span>
+            <div class="input-line">
+              <input v-model="form.dueTime" type="time" name="dueTime">
+              <span class="inline-icon" aria-hidden="true">⏰</span>
+            </div>
+            <small v-if="errors.dueTime" class="error">{{ errors.dueTime }}</small>
+          </label>
+        </div>
+      </section>
+
+      <aside class="todo-form-side">
+        <div v-if="projectId" class="project-context">
+          <span class="field-label">Projekt</span>
+          <strong>{{ projectId }}</strong>
+        </div>
+
+        <label class="toggle-row">
+          <span class="toggle-copy">
+            <strong>Sync</strong>
+            <small>Synchronisierung aktivieren</small>
+          </span>
+          <input v-model="form.syncEnabled" class="toggle-input" type="checkbox" name="syncEnabled">
+          <span class="toggle-ui" aria-hidden="true" />
+        </label>
+
+        <label class="toggle-row">
+          <span class="toggle-copy">
+            <strong>Erinnerung</strong>
+            <small>Benachrichtigung zum Termin</small>
+          </span>
+          <input v-model="form.reminderEnabled" class="toggle-input" type="checkbox" name="reminderEnabled">
+          <span class="toggle-ui" aria-hidden="true" />
+        </label>
+
+        <label class="toggle-row">
+          <span class="toggle-copy">
+            <strong>Wiederholen</strong>
+            <small>Wiederkehrende Aufgabe markieren</small>
+          </span>
+          <input v-model="form.recurringEnabled" class="toggle-input" type="checkbox" name="recurringEnabled">
+          <span class="toggle-ui" aria-hidden="true" />
+        </label>
+
+        <label class="field">
+          <span class="field-label">Status</span>
+          <select v-model="form.status" name="status">
+            <option value="open">Offen</option>
+            <option value="done">Erledigt</option>
+          </select>
+        </label>
+      </aside>
+    </div>
+
+    <p v-if="errors.submit" class="error">{{ errors.submit }}</p>
+
+    <div class="actions">
+      <button class="primary-button" type="submit" :disabled="isSubmitting">
+        {{ isSubmitting ? 'Wird gespeichert...' : submitLabel }}
+      </button>
+      <button class="ghost-button" type="button" @click="$emit('cancel')">
+        Abbrechen
+      </button>
+    </div>
+  </form>
+</template>
+
+<style>
+:root {
+  font-family: "Avenir Next", "Segoe UI", sans-serif;
+  color: #1a1a1a;
+  background:
+    radial-gradient(circle at top left, rgba(255, 255, 255, 0.8), transparent 24%),
+    linear-gradient(180deg, #f4f4f2 0%, #ebebe8 100%);
+  line-height: 1.5;
+  font-weight: 400;
+  --surface: rgba(255, 255, 255, 0.7);
+  --surface-strong: #ffffff;
+  --border: #cfcfcb;
+  --line: #b9b9b5;
+  --accent: #274f69;
+  --accent-soft: #d6e4ec;
+  --text-muted: #686866;
+  --chip: #d8d8d8;
+  --success: #dff7e7;
+}
+
+* {
+  box-sizing: border-box;
+}
+
+body {
+  margin: 0;
+  min-width: 320px;
+  min-height: 100vh;
+}
+
+button,
+input,
+textarea,
+select {
+  font: inherit;
+}
+
+a {
+  color: inherit;
+  text-decoration: none;
+}
+
+#app {
+  min-height: 100vh;
+}
+
+.app-shell {
+  display: grid;
+  grid-template-columns: 250px minmax(0, 1fr);
+  min-height: 100vh;
+}
+
+.card h2 {
+  margin: 0;
+}
+
+.sidebar {
+  display: grid;
+  grid-template-rows: auto auto auto auto 1fr auto;
+  gap: 18px;
+  padding: 30px 22px;
+  border-right: 1px solid rgba(26, 26, 26, 0.12);
+  background: rgba(245, 245, 242, 0.92);
+}
+
+.sidebar-block,
+.sidebar-panel {
+  padding-bottom: 18px;
+  border-bottom: 1px solid rgba(26, 26, 26, 0.12);
+}
+
+.sidebar-user,
+.sidebar-section-title {
+  margin: 0;
+  font-size: 1.35rem;
+  text-transform: lowercase;
+}
+
+.sidebar-nav,
+.sidebar-footer,
+.sidebar-list {
+  display: grid;
+  gap: 14px;
+}
+
+.sidebar-link {
+  display: flex;
+  align-items: center;
+  gap: 14px;
+  font-size: 1.15rem;
+  color: #202020;
+}
+
+.sidebar-link-primary {
+  font-weight: 600;
+}
+
+.sidebar-link-muted {
+  color: var(--text-muted);
+}
+
+.sidebar-link.router-link-active {
+  color: #000;
+}
+
+.sidebar-icon {
+  width: 22px;
+  text-align: center;
+  font-size: 1.2rem;
+}
+
+.sidebar-list {
+  margin: 0;
+  padding-left: 32px;
+  list-style: none;
+  color: var(--text-muted);
+  font-size: 1.1rem;
+}
+
+.workspace {
+  padding: 18px 22px 28px;
+  display: grid;
+  align-content: start;
+}
+
+.view-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) 320px;
+  gap: 24px;
+  align-items: start;
+}
+
+.stack {
+  display: grid;
+  gap: 20px;
+}
+
+.card {
+  background: var(--surface);
+  border: 1px solid rgba(26, 26, 26, 0.08);
+  border-radius: 28px;
+  padding: 24px;
+  backdrop-filter: blur(12px);
+  box-shadow: 0 18px 40px rgba(40, 40, 40, 0.08);
+}
+
+.card-header {
+  display: flex;
+  gap: 16px;
+  justify-content: space-between;
+  align-items: start;
+  margin-bottom: 20px;
+}
+
+.eyebrow {
+  margin: 0 0 6px;
+  text-transform: uppercase;
+  letter-spacing: 0.12em;
+  font-size: 0.75rem;
+  color: var(--text-muted);
+}
+
+.badge,
+.status-pill {
+  display: inline-flex;
+  align-items: center;
+  padding: 6px 10px;
+  border-radius: 999px;
+  font-size: 0.85rem;
+}
+
+.badge {
+  background: #ececec;
+  color: #303030;
+}
+
+.status-pill[data-status='open'] {
+  background: #fff1bf;
+  color: #785d00;
+}
+
+.status-pill[data-status='done'] {
+  background: #d7f8df;
+  color: #19643a;
+}
+
+.todo-form,
+.field {
+  display: grid;
+  gap: 8px;
+}
+
+.todo-form {
+  gap: 24px;
+  background: #f2f2ef;
+  min-height: calc(100vh - 48px);
+  border-radius: 0;
+  border: 1px solid rgba(26, 26, 26, 0.12);
+  box-shadow: none;
+}
+
+.todo-form-header {
+  display: grid;
+  grid-template-columns: auto 1fr auto;
+  align-items: center;
+  gap: 16px;
+}
+
+.todo-form-heading {
+  text-align: left;
+}
+
+.todo-form-heading .eyebrow {
+  margin-bottom: 2px;
+}
+
+.todo-form-grid {
+  display: grid;
+  grid-template-columns: minmax(0, 1.6fr) minmax(260px, 0.9fr);
+  gap: 28px;
+}
+
+.todo-form-main,
+.todo-form-side {
+  display: grid;
+  gap: 20px;
+  align-content: start;
+}
+
+.todo-form-split {
+  display: grid;
+  grid-template-columns: repeat(2, minmax(0, 1fr));
+  gap: 20px;
+}
+
+.field + .field {
+  margin-top: 16px;
+}
+
+.field-label {
+  font-size: 0.95rem;
+  color: var(--text-muted);
+}
+
+.field input,
+.field textarea,
+.field select {
+  width: 100%;
+  border: 0;
+  border-bottom: 2px solid var(--line);
+  border-radius: 0;
+  padding: 12px 4px;
+  background: transparent;
+  color: #1a1a1a;
+}
+
+.field input:focus,
+.field textarea:focus,
+.field select:focus {
+  outline: none;
+  border-bottom-color: var(--accent);
+}
+
+.field textarea {
+  resize: vertical;
+  min-height: 110px;
+}
+
+.field-title input {
+  font-size: clamp(1.7rem, 3vw, 2.4rem);
+  line-height: 1.1;
+}
+
+.input-line {
+  display: flex;
+  align-items: center;
+  gap: 12px;
+}
+
+.inline-icon,
+.inline-icon-button {
+  flex: 0 0 auto;
+}
+
+.inline-icon {
+  font-size: 1.8rem;
+}
+
+.icon-button,
+.inline-icon-button,
+.chip-remove {
+  border: 0;
+  background: transparent;
+  color: inherit;
+  cursor: pointer;
+}
+
+.icon-button {
+  width: 56px;
+  height: 56px;
+  border: 3px solid #111;
+  border-radius: 999px;
+  display: grid;
+  place-items: center;
+  font-size: 1.9rem;
+  padding: 0;
+  background: var(--surface-strong);
+}
+
+.icon-button-primary {
+  border-color: var(--accent);
+  color: var(--accent);
+}
+
+.icon-button:disabled {
+  opacity: 0.5;
+  cursor: wait;
+}
+
+.inline-icon-button {
+  padding: 10px 12px;
+  border-radius: 14px;
+  background: #e3e3e1;
+  white-space: nowrap;
+}
+
+.category-list,
+.todo-meta-row {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.category-chip,
+.meta-chip {
+  display: inline-flex;
+  align-items: center;
+  gap: 8px;
+  border-radius: 0;
+  background: var(--chip);
+  border: 1px solid var(--border);
+  padding: 10px 14px;
+}
+
+.chip-remove {
+  padding: 0;
+  font-size: 1rem;
+  line-height: 1;
+}
+
+.project-context {
+  display: grid;
+  gap: 4px;
+  padding: 16px;
+  border: 1px dashed var(--border);
+  border-radius: 20px;
+}
+
+.toggle-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  align-items: center;
+  gap: 12px 16px;
+}
+
+.toggle-copy {
+  display: grid;
+  gap: 2px;
+}
+
+.toggle-copy small {
+  color: var(--text-muted);
+}
+
+.toggle-input {
+  position: absolute;
+  opacity: 0;
+  pointer-events: none;
+}
+
+.toggle-ui {
+  position: relative;
+  width: 76px;
+  height: 42px;
+  border-radius: 999px;
+  border: 3px solid var(--accent);
+  background: rgba(255, 255, 255, 0.6);
+  transition: background 150ms ease;
+}
+
+.toggle-ui::after {
+  content: '';
+  position: absolute;
+  top: 4px;
+  left: 4px;
+  width: 26px;
+  height: 26px;
+  border-radius: 999px;
+  background: var(--accent);
+  transition: transform 150ms ease;
+}
+
+.toggle-input:checked + .toggle-ui::after {
+  transform: translateX(32px);
+}
+
+.toggle-input:checked + .toggle-ui {
+  background: var(--accent-soft);
+}
+
+.actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 12px;
+  margin-top: 0;
+  justify-content: center;
+}
+
+.primary-button,
+.ghost-button {
+  border: 0;
+  border-radius: 999px;
+  padding: 12px 18px;
+  cursor: pointer;
+  height: 48px;
+}
+
+.primary-button {
+  background: linear-gradient(135deg, #274f69, #3a708e);
+  color: #fff;
+}
+
+.primary-button:disabled {
+  opacity: 0.7;
+  cursor: wait;
+}
+
+.ghost-button {
+  background: #e5e5e2;
+  color: #303030;
+}
+
+.error {
+  color: #b42318;
+  margin: 0;
+}
+
+.success-banner {
+  background: var(--success);
+  color: #19643a;
+  border: 1px solid #a7dbb8;
+  border-radius: 18px;
+  padding: 14px 18px;
+}
+
+.todo-list {
+  list-style: none;
+  padding: 0;
+  margin: 0;
+  display: grid;
+  gap: 14px;
+}
+
+.todo-item {
+  padding: 16px;
+  border-radius: 18px;
+  background: #f8f8f6;
+  border: 1px solid #e2e2de;
+}
+
+.todo-item-header {
+  display: flex;
+  justify-content: space-between;
+  gap: 12px;
+  margin-bottom: 8px;
+}
+
+.todo-item p,
+.project-card p,
+.empty-state {
+  margin: 0;
+}
+
+.todo-item small {
+  color: var(--text-muted);
+}
+
+@media (max-width: 640px) {
+  .app-shell {
+    grid-template-columns: 1fr;
+  }
+
+  .sidebar {
+    grid-template-rows: auto;
+    gap: 14px;
+    padding: 18px;
+    border-right: 0;
+    border-bottom: 1px solid rgba(26, 26, 26, 0.12);
+  }
+
+  .sidebar-panel {
+    display: none;
+  }
+
+  .sidebar-nav {
+    grid-template-columns: repeat(2, minmax(0, 1fr));
+  }
+
+  .workspace {
+    padding: 12px;
+  }
+
+  .view-grid {
+    grid-template-columns: 1fr;
+  }
+
+  .card {
+    padding: 18px;
+    border-radius: 20px;
+  }
+
+  .card-header,
+  .todo-item-header {
+    flex-direction: column;
+  }
+
+  .todo-form {
+    gap: 20px;
+    min-height: auto;
+    border-radius: 24px;
+  }
+
+  .todo-form-grid,
+  .todo-form-split {
+    grid-template-columns: 1fr;
+  }
+
+  .todo-form-header {
+    grid-template-columns: auto 1fr auto;
+    gap: 10px;
+  }
+
+  .todo-form-heading {
+    text-align: left;
+  }
+
+  .field-title input {
+    font-size: 1.1rem;
+  }
+
+  .icon-button {
+    width: 48px;
+    height: 48px;
+    font-size: 1.6rem;
+  }
+
+  .toggle-row {
+    grid-template-columns: 1fr auto;
+  }
+
+  .actions {
+    justify-content: stretch;
+  }
+
+  .actions button {
+    flex: 1 1 0;
+  }
+}
+</style>

@@ -1,5 +1,15 @@
 <script setup>
+import { computed, onMounted } from 'vue'
 import { RouterLink, RouterView } from 'vue-router'
+
+import { useTodoStore } from '@/stores/todos'
+
+const todoStore = useTodoStore()
+const sidebarCategories = computed(() => todoStore.categoryOptions)
+
+onMounted(() => {
+  todoStore.initialize()
+})
 </script>
 
 <template>
@@ -15,6 +25,11 @@ import { RouterLink, RouterView } from 'vue-router'
           <span>Add a Task</span>
         </RouterLink>
 
+        <RouterLink class="sidebar-link" to="/todo-overview">
+          <span class="sidebar-icon">☰</span>
+          <span>All Todos</span>
+        </RouterLink>
+
         <a class="sidebar-link" href="#search">
           <span class="sidebar-icon">⌕</span>
           <span>search</span>
@@ -25,10 +40,10 @@ import { RouterLink, RouterView } from 'vue-router'
           <span>Filters</span>
         </a>
 
-        <a class="sidebar-link sidebar-link-muted" href="#ask-ai">
+        <RouterLink class="sidebar-link sidebar-link-muted" to="/ai-assistant">
           <span class="sidebar-icon">✦</span>
           <span>Ask AI</span>
-        </a>
+        </RouterLink>
       </nav>
 
       <section class="sidebar-panel">
@@ -37,17 +52,17 @@ import { RouterLink, RouterView } from 'vue-router'
 
       <section class="sidebar-panel">
         <ul class="sidebar-list">
-          <li>Work</li>
-          <li>Home</li>
-          <li>Personal</li>
+          <li v-for="category in sidebarCategories" :key="category.id">
+            {{ category.name }}
+          </li>
         </ul>
       </section>
 
       <div class="sidebar-footer">
-        <a class="sidebar-link sidebar-link-muted" href="#settings">
+        <RouterLink class="sidebar-link sidebar-link-muted" to="/settings">
           <span class="sidebar-icon">⚙</span>
           <span>settings</span>
-        </a>
+        </RouterLink>
       </div>
     </aside>
 
