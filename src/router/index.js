@@ -1,6 +1,10 @@
 import { createRouter, createWebHistory } from 'vue-router'
-import HomeView from '../views/HomeView.vue'
-import AiAssistantView from '../views/AiAssistantView.vue'
+
+import HomeView from '@/views/HomeView.vue'
+import ProjectDetailView from '@/views/ProjectDetailView.vue'
+import AiAssistantView from '@/views/AiAssistantView.vue'
+import SettingsView from '@/views/SettingsView.vue'
+import TodosListView from '@/views/TodosListView.vue'
 
 const router = createRouter({
   history: createWebHistory(import.meta.env.BASE_URL),
@@ -11,17 +15,25 @@ const router = createRouter({
       component: HomeView,
     },
     {
-      path: '/about',
-      name: 'about',
-      // route level code-splitting
-      // this generates a separate chunk (About.[hash].js) for this route
-      // which is lazy-loaded when the route is visited.
-      component: () => import('../views/AboutView.vue'),
+      path: '/projects/:projectId',
+      name: 'project-detail',
+      component: ProjectDetailView,
+      props: true,
+    },
+    {
+      path: '/todo-overview',
+      name: 'todo-overview',
+      component: TodosListView,
     },
     {
       path: '/ai-assistant',
       name: 'ai-assistant',
       component: AiAssistantView,
+    },
+    {
+      path: '/settings',
+      name: 'settings',
+      component: SettingsView,
     },
   ],
 })
