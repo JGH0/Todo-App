@@ -162,6 +162,10 @@ const todos = ref([
 	}
 ])
 
+// State for edit modal
+const editingTodo = ref(null)
+const categoryInput = ref('')
+
 // Filter todos based on category
 const filteredTodos = computed(() => {
 	if (!props.category) return todos.value
@@ -176,6 +180,46 @@ const toggleComplete = (todo) => {
 // Toggle favorite
 const toggleFavorite = (todo) => {
 	todo.favorite = !todo.favorite
+}
+
+// Edit modal methods
+const openEdit = (todo) => {
+	// Create a shallow copy (for editing, we need a copy to avoid mutating original until save)
+	editingTodo.value = { ...todo, categories: [...todo.categories] }
+	categoryInput.value = ''
+}
+
+const closeEdit = () => {
+	editingTodo.value = null
+	categoryInput.value = ''
+}
+
+const addCategory = () => {
+	if (!editingTodo.value) return
+	const value = categoryInput.value.trim()
+	if (!value || editingTodo.value.categories.includes(value)) {
+		categoryInput.value = ''
+		return
+	}
+	editingTodo.value.categories = [...editingTodo.value.categories, value]
+	categoryInput.value = ''
+}
+
+const removeCategory = (cat) => {
+	if (!editingTodo.value) return
+	editingTodo.value.categories = editingTodo.value.categories.filter(c => c !== cat)
+}
+
+const saveEdit = () => {
+	if (!editingTodo.value) return
+	// Here you would normally persist the changes, e.g., call an API or update the original todo
+	console.log('Saving edited todo:', editingTodo.value)
+	// For demo, we actually update the original todo (so changes are visible)
+	const index = todos.value.findIndex(t => t.id === editingTodo.value.id)
+	if (index !== -1) {
+		todos.value[index] = { ...editingTodo.value }
+	}
+	closeEdit()
 }
 
 // Dummy countdown text (static 3 days)
@@ -231,8 +275,14 @@ const countdownText = '🗑️ 3 days'
 							</svg>
 						</button>
 						<!-- Edit button with SVG -->
-						<button class="icon-btn edit" aria-label="Edit task">
-							<svg viewBox="0 0 24 24" id="_24x24_On_Light_Edit" data-name="24x24/On Light/Edit" xmlns="http://www.w3.org/2000/svg" fill="#000000"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <path id="Shape" d="M.75,17.5A.751.751,0,0,1,0,16.75V12.569a.755.755,0,0,1,.22-.53L11.461.8a2.72,2.72,0,0,1,3.848,0L16.7,2.191a2.72,2.72,0,0,1,0,3.848L5.462,17.28a.747.747,0,0,1-.531.22ZM1.5,12.879V16h3.12l7.91-7.91L9.41,4.97ZM13.591,7.03l2.051-2.051a1.223,1.223,0,0,0,0-1.727L14.249,1.858a1.222,1.222,0,0,0-1.727,0L10.47,3.91Z" transform="translate(3.25 3.25)" fill="#141124"></path> </g></svg>
+						<button class="icon-btn edit" aria-label="Edit task" @click="openEdit(todo)">
+							<svg viewBox="0 0 24 24" id="_24x24_On_Light_Edit" data-name="24x24/On Light/Edit" xmlns="http://www.w3.org/2000/svg" fill="#000000">
+								<g id="SVGRepo_bgCarrier" stroke-width="0"></g>
+								<g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
+								<g id="SVGRepo_iconCarrier">
+									<path id="Shape" d="M.75,17.5A.751.751,0,0,1,0,16.75V12.569a.755.755,0,0,1,.22-.53L11.461.8a2.72,2.72,0,0,1,3.848,0L16.7,2.191a2.72,2.72,0,0,1,0,3.848L5.462,17.28a.747.747,0,0,1-.531.22ZM1.5,12.879V16h3.12l7.91-7.91L9.41,4.97ZM13.591,7.03l2.051-2.051a1.223,1.223,0,0,0,0-1.727L14.249,1.858a1.222,1.222,0,0,0-1.727,0L10.47,3.91Z" transform="translate(3.25 3.25)" fill="#141124"></path>
+								</g>
+							</svg>
 						</button>
 					</div>
 				</div>
@@ -269,11 +319,90 @@ const countdownText = '🗑️ 3 days'
 				</div>
 			</li>
 		</ul>
+
+		<!-- Edit Modal -->
+		<Teleport to="body">
+			<div v-if="editingTodo" class="modal-overlay" @click.self="closeEdit">
+				<div class="modal-card">
+					<div class="modal-header">
+						<h3>Edit Task</h3>
+						<button class="close-btn" @click="closeEdit">✕</button>
+					</div>
+
+					<div class="modal-body">
+						<!-- Title -->
+						<div class="field">
+							<label class="field-label">Title</label>
+							<input v-model="editingTodo.title" type="text" placeholder="Task title" />
+						</div>
+
+						<!-- Description -->
+						<div class="field">
+							<label class="field-label">Description</label>
+							<textarea v-model="editingTodo.description" rows="3" placeholder="Description"></textarea>
+						</div>
+
+						<!-- Date and Time -->
+						<div class="split-row">
+							<div class="field">
+								<label class="field-label">Date</label>
+								<input v-model="editingTodo.dueDate" type="date" />
+							</div>
+							<div class="field" style="margin-top: 0;">
+								<label class="field-label">Time</label>
+								<input v-model="editingTodo.dueTime" type="time" />
+							</div>
+						</div>
+
+						<!-- Categories -->
+						<div class="field">
+							<label class="field-label">Categories</label>
+							<div class="category-list">
+								<span v-for="cat in editingTodo.categories" :key="cat" class="category-chip">
+									{{ cat }}
+									<button type="button" class="chip-remove" @click="removeCategory(cat)">✕</button>
+								</span>
+							</div>
+							<div class="input-line">
+								<input
+									v-model="categoryInput"
+									type="text"
+									placeholder="Add category"
+									@keydown.enter.prevent="addCategory"
+								/>
+								<button class="inline-icon-button" type="button" @click="addCategory">Add</button>
+							</div>
+						</div>
+
+						<!-- Status and Favorite -->
+						<div class="split-row">
+							<div class="field">
+								<label class="field-label">Status</label>
+								<select v-model="editingTodo.status">
+									<option value="open">Open</option>
+									<option value="done">Done</option>
+								</select>
+							</div>
+							<div class="field checkbox-field">
+								<label>
+									<input type="checkbox" v-model="editingTodo.favorite" />
+									<span>Favorite</span>
+								</label>
+							</div>
+						</div>
+					</div>
+
+					<div class="modal-footer">
+						<button class="secondary-button" @click="closeEdit">Cancel</button>
+						<button class="primary-button" @click="saveEdit">Save</button>
+					</div>
+				</div>
+			</div>
+		</Teleport>
 	</div>
 </template>
 
 <style scoped>
-/* Reuse existing global styles, add new ones for this view */
 .todo-list-view {
 	background: var(--surface);
 	backdrop-filter: blur(12px);
@@ -454,5 +583,180 @@ const countdownText = '🗑️ 3 days'
 	.meta-right {
 		align-self: flex-end;
 	}
+}
+
+.modal-overlay {
+	position: fixed;
+	top: 0;
+	left: 0;
+	width: 100%;
+	height: 100%;
+	background: rgba(0, 0, 0, 0.5);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 1000;
+}
+
+.modal-card {
+	background: white;
+	border-radius: 28px;
+	padding: 24px;
+	width: 90%;
+	max-width: 500px;
+	max-height: 90vh;
+	overflow-y: auto;
+	box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+
+.modal-header {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	margin-bottom: 20px;
+}
+
+.modal-header h3 {
+	margin: 0;
+	color: #333;
+}
+
+.close-btn {
+	background: transparent;
+	border: none;
+	font-size: 1.5rem;
+	cursor: pointer;
+	padding: 0;
+	line-height: 1;
+}
+
+.modal-body {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+}
+
+.field {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.field-label {
+	font-size: 0.9rem;
+	color: var(--text-muted);
+}
+
+.field input,
+.field textarea,
+.field select {
+	width: 100%;
+	border: 1px solid var(--border);
+	border-radius: 12px;
+	padding: 10px 12px;
+	font: inherit;
+	background: white;
+}
+
+.field input:focus,
+.field textarea:focus,
+.field select:focus {
+	outline: none;
+	border-color: var(--accent);
+}
+
+.split-row {
+	display: grid;
+	grid-template-columns: 1fr 1fr;
+	gap: 12px;
+}
+
+.category-list {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	margin-bottom: 8px;
+}
+
+.category-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	background: var(--chip);
+	border: 1px solid var(--border);
+	padding: 6px 12px;
+	font-size: 0.9rem;
+	border-radius: 999px;
+	color: #000;
+}
+
+.chip-remove {
+	background: transparent;
+	border: none;
+	cursor: pointer;
+	padding: 0 2px;
+	font-size: 1rem;
+	line-height: 1;
+}
+
+.input-line {
+	display: flex;
+	gap: 8px;
+}
+
+.input-line input {
+	flex: 1;
+}
+
+.inline-icon-button {
+	background: var(--chip);
+	border: 1px solid var(--border);
+	border-radius: 999px;
+	padding: 8px 16px;
+	cursor: pointer;
+	white-space: nowrap;
+	color: #000;
+}
+
+.checkbox-field {
+	display: flex;
+	align-items: center;
+	justify-content: flex-start;
+}
+
+.checkbox-field label {
+	display: flex;
+	align-items: center;
+	gap: 8px;
+	cursor: pointer;
+	span {
+	color:#000
+	}
+}
+
+.modal-footer {
+	display: flex;
+	justify-content: flex-end;
+	gap: 12px;
+	margin-top: 24px;
+}
+
+.primary-button,
+.secondary-button {
+	border: none;
+	border-radius: 999px;
+	padding: 10px 20px;
+	cursor: pointer;
+	font-weight: 500;
+}
+
+.primary-button {
+	background: var(--accent);
+	color: white;
+}
+
+.secondary-button {
+	background: #e5e5e2;
+	color: #303030;
 }
 </style>
