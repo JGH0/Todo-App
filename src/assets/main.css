@@ -241,6 +241,12 @@ a {
   color: var(--text-muted);
 }
 
+.field-hint {
+  margin: 0;
+  color: var(--text-muted);
+  font-size: 0.9rem;
+}
+
 .field input,
 .field textarea,
 .field select {
@@ -339,6 +345,12 @@ a {
   background: var(--chip);
   border: 1px solid var(--border);
   padding: 10px 14px;
+}
+
+.category-chip-active {
+  background: var(--accent);
+  border-color: var(--accent);
+  color: #fff;
 }
 
 .chip-remove {
@@ -451,6 +463,14 @@ a {
   padding: 14px 18px;
 }
 
+.error-banner {
+  background: #fde8e8;
+  color: #a61b1b;
+  border: 1px solid #efb3b3;
+  border-radius: 18px;
+  padding: 14px 18px;
+}
+
 .todo-list {
   list-style: none;
   padding: 0;
@@ -481,6 +501,37 @@ a {
 
 .todo-item small {
   color: var(--text-muted);
+}
+
+.todo-item-actions {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+  margin-top: 12px;
+}
+
+.ghost-button-danger {
+  background: #f8dcdc;
+  color: #992020;
+}
+
+.category-manager-list {
+  display: grid;
+  gap: 12px;
+}
+
+.category-manager-row {
+  display: grid;
+  grid-template-columns: minmax(0, 1fr) auto auto;
+  gap: 10px;
+}
+
+.category-manager-input {
+  width: 100%;
+  border: 1px solid var(--border);
+  border-radius: 14px;
+  padding: 10px 12px;
+  background: rgba(255, 255, 255, 0.75);
 }
 
 @media (max-width: 640px) {
@@ -562,5 +613,9 @@ a {
 
   .actions button {
     flex: 1 1 0;
+  }
+
+  .category-manager-row {
+    grid-template-columns: 1fr;
   }
 }

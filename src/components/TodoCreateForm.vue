@@ -18,9 +18,13 @@ const props = defineProps({
     type: String,
     default: 'open',
   },
-  initialCategories: {
+  categories: {
     type: Array,
     default: () => [],
+  },
+  createCategory: {
+    type: Function,
+    default: null,
   },
   submitTodo: {
     type: Function,
@@ -34,7 +38,7 @@ const form = reactive({
   title: '',
   description: '',
   status: props.initialStatus,
-  categories: [...props.initialCategories],
+  categoryId: '',
   categoryInput: '',
   dueDate: '',
   dueTime: '',
@@ -52,6 +56,9 @@ const errors = reactive({
 
 const isSubmitting = ref(false)
 const normalizedStatus = computed(() => (form.status === 'done' ? 'Erledigt' : 'Offen'))
+const selectedCategory = computed(() =>
+  props.categories.find((category) => String(category.id) === String(form.categoryId)) || null,
+)
 
 watch(
   () => props.initialStatus,
@@ -61,9 +68,11 @@ watch(
 )
 
 watch(
-  () => props.initialCategories,
+  () => props.categories,
   (categories) => {
-    form.categories = [...categories]
+    if (!categories.some((category) => String(category.id) === String(form.categoryId))) {
+      form.categoryId = ''
+    }
   },
   { deep: true },
 )
@@ -72,7 +81,7 @@ const resetForm = () => {
   form.title = ''
   form.description = ''
   form.status = props.initialStatus
-  form.categories = [...props.initialCategories]
+  form.categoryId = ''
   form.categoryInput = ''
   form.dueDate = ''
   form.dueTime = ''
@@ -92,23 +101,22 @@ const validate = () => {
   return !errors.title && !errors.dueDate && !errors.dueTime
 }
 
-const addCategory = () => {
-  const value = form.categoryInput.trim()
-  if (!value || form.categories.includes(value)) {
-    form.categoryInput = ''
+const toggleStatus = () => {
+  form.status = form.status === 'open' ? 'done' : 'open'
+}
+
+const handleCreateCategory = async () => {
+  if (!props.createCategory) {
     return
   }
 
-  form.categories = [...form.categories, value]
-  form.categoryInput = ''
-}
-
-const removeCategory = (categoryToRemove) => {
-  form.categories = form.categories.filter((category) => category !== categoryToRemove)
-}
-
-const toggleStatus = () => {
-  form.status = form.status === 'open' ? 'done' : 'open'
+  try {
+    const category = await props.createCategory(form.categoryInput)
+    form.categoryId = String(category.id)
+    form.categoryInput = ''
+  } catch (error) {
+    errors.submit = error instanceof Error ? error.message : 'Kategorie konnte nicht erstellt werden.'
+  }
 }
 
 const handleSubmit = async () => {
@@ -122,7 +130,7 @@ const handleSubmit = async () => {
     title: form.title,
     description: form.description,
     status: form.status,
-    categories: [...form.categories],
+    categoryId: form.categoryId || null,
     dueDate: form.dueDate || null,
     dueTime: form.dueTime || null,
     syncEnabled: form.syncEnabled,
@@ -199,14 +207,23 @@ const handleSubmit = async () => {
 
         <section class="field">
           <span class="field-label">Kategorien</span>
-          <div v-if="form.categories.length" class="category-list">
-            <span v-for="category in form.categories" :key="category" class="category-chip">
-              {{ category }}
-              <button type="button" class="chip-remove" :aria-label="`Kategorie ${category} entfernen`" @click="removeCategory(category)">
-                ✕
-              </button>
-            </span>
+
+          <div v-if="categories.length" class="category-list">
+            <button
+              v-for="category in categories"
+              :key="category.id"
+              type="button"
+              class="category-chip"
+              :class="{ 'category-chip-active': String(category.id) === String(form.categoryId) }"
+              @click="form.categoryId = String(category.id)"
+            >
+              {{ category.name }}
+            </button>
           </div>
+
+          <p v-if="selectedCategory" class="field-hint">
+            Aktiv: {{ selectedCategory.name }}
+          </p>
 
           <div class="input-line">
             <input
@@ -214,9 +231,9 @@ const handleSubmit = async () => {
               type="text"
               name="category"
               placeholder="Neue Kategorie hinzufuegen"
-              @keydown.enter.prevent="addCategory"
+              @keydown.enter.prevent="handleCreateCategory"
             >
-            <button class="inline-icon-button" type="button" @click="addCategory">
+            <button class="inline-icon-button" type="button" @click="handleCreateCategory">
               Hinzufuegen
             </button>
           </div>

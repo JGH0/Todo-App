@@ -1,5 +1,5 @@
 <script setup>
-defineProps({
+const props = defineProps({
   title: {
     type: String,
     required: true,
@@ -7,6 +7,18 @@ defineProps({
   todos: {
     type: Array,
     default: () => [],
+  },
+  categoryMap: {
+    type: Object,
+    default: () => ({}),
+  },
+  onToggleStatus: {
+    type: Function,
+    default: null,
+  },
+  onDeleteTodo: {
+    type: Function,
+    default: null,
   },
 })
 
@@ -35,9 +47,9 @@ const statusLabels = {
           </span>
         </div>
         <p v-if="todo.description">{{ todo.description }}</p>
-        <div v-if="todo.categories?.length" class="todo-meta-row">
-          <span v-for="category in todo.categories" :key="category" class="meta-chip">
-            {{ category }}
+        <div v-if="todo.categoryId" class="todo-meta-row">
+          <span class="meta-chip">
+            {{ props.categoryMap[todo.categoryId] || `Kategorie #${todo.categoryId}` }}
           </span>
         </div>
         <div v-if="todo.dueDate || todo.dueTime" class="todo-meta-row">
@@ -53,6 +65,14 @@ const statusLabels = {
           <small v-if="todo.recurringEnabled">Wiederholend</small>
         </div>
         <small v-if="todo.projectId">Projektbezug: {{ todo.projectId }}</small>
+        <div class="todo-item-actions">
+          <button v-if="onToggleStatus" class="ghost-button" type="button" @click="onToggleStatus(todo.id)">
+            {{ todo.status === 'done' ? 'Als offen markieren' : 'Als erledigt markieren' }}
+          </button>
+          <button v-if="onDeleteTodo" class="ghost-button ghost-button-danger" type="button" @click="onDeleteTodo(todo.id)">
+            Loeschen
+          </button>
+        </div>
       </li>
     </ul>
 
