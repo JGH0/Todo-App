@@ -299,7 +299,7 @@ const handleSubmit = async () => {
   </form>
 </template>
 
-<style>
+<style scoped>
 :root {
   font-family: "Avenir Next", "Segoe UI", sans-serif;
   color: #1a1a1a;
