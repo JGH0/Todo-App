@@ -1,7 +1,8 @@
 <script setup>
-import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount, watch } from 'vue'
 import { getTodos, updateTodo, deleteTodo } from '@/services/todoService'
 import { getCategories } from '@/services/categoryService'
+import { getAutoDeleteMinutes, AUTO_DELETE_MINUTES_KEY } from '@/utils/appSettings'
 
 const props = defineProps({
 	category: {
@@ -23,6 +24,13 @@ const categoryInput = ref('')
 // State for delete modal
 const deleteTarget = ref(null)
 const deleteModalVisible = ref(false)
+
+// Auto‑delete setting (in minutes)
+const autoDeleteMinutes = ref(getAutoDeleteMinutes())
+
+// For live countdown
+const currentTime = ref(new Date())
+let timer = null
 
 // Normalize todos: ensure each has a `categories` array (strings)
 const normalizedTodos = computed(() => {
@@ -48,6 +56,33 @@ const filteredTodos = computed(() => {
 	)
 })
 
+// Helper: delete todos that have been done for more than `autoDeleteMinutes`
+const deleteExpiredTodos = async () => {
+	const expiryDate = new Date()
+	expiryDate.setMinutes(expiryDate.getMinutes() - autoDeleteMinutes.value)
+
+	const expiredTodos = rawTodos.value.filter(todo => {
+		if (todo.status !== 'done') return false
+		if (!todo.completedAt) return false
+		const completedDate = new Date(todo.completedAt)
+		return completedDate < expiryDate
+	})
+
+	if (expiredTodos.length === 0) return
+
+	// Delete each expired todo
+	for (const todo of expiredTodos) {
+		try {
+			await deleteTodo(todo.id)
+		} catch (err) {
+			console.error(`Failed to delete expired todo ${todo.id}:`, err)
+		}
+	}
+
+	// Refresh local list
+	rawTodos.value = rawTodos.value.filter(t => !expiredTodos.some(e => e.id === t.id))
+}
+
 // Load todos and categories from API
 const loadData = async () => {
 	isLoading.value = true
@@ -59,6 +94,7 @@ const loadData = async () => {
 		])
 		rawTodos.value = todosData
 		categoriesList.value = catsData
+		await deleteExpiredTodos()
 	} catch (err) {
 		console.error('Error loading data:', err)
 		error.value = 'Failed to load todos. Please try again.'
@@ -70,14 +106,35 @@ const loadData = async () => {
 // Toggle completion status
 const toggleComplete = async (todo) => {
 	const originalStatus = todo.status
+	// Optimistic update
 	todo.status = todo.status === 'open' ? 'done' : 'open'
+
+	// Set or remove completedAt timestamp
+	if (todo.status === 'done') {
+		todo.completedAt = new Date().toISOString()
+	} else {
+		delete todo.completedAt
+	}
+
 	try {
 		const payload = { ...todo, categories: todo.categories }
 		delete payload.categoryId
-		await updateTodo(todo.id, payload)
+		const updated = await updateTodo(todo.id, payload)
+		const index = rawTodos.value.findIndex(t => t.id === todo.id)
+		if (index !== -1) {
+			rawTodos.value[index] = updated
+		}
+		// After successful toggle, check for expired todos
+		await deleteExpiredTodos()
 	} catch (err) {
 		console.error('Error toggling todo status:', err)
+		// Revert on error
 		todo.status = originalStatus
+		if (originalStatus === 'done') {
+			todo.completedAt = new Date().toISOString()
+		} else {
+			delete todo.completedAt
+		}
 		error.value = 'Failed to update todo status.'
 		setTimeout(() => { error.value = null }, 3000)
 	}
@@ -86,11 +143,16 @@ const toggleComplete = async (todo) => {
 // Toggle favorite
 const toggleFavorite = async (todo) => {
 	const originalFavorite = todo.favorite
+	// Optimistic update
 	todo.favorite = !todo.favorite
 	try {
 		const payload = { ...todo, categories: todo.categories }
 		delete payload.categoryId
-		await updateTodo(todo.id, payload)
+		const updated = await updateTodo(todo.id, payload)
+		const index = rawTodos.value.findIndex(t => t.id === todo.id)
+		if (index !== -1) {
+			rawTodos.value[index] = updated
+		}
 	} catch (err) {
 		console.error('Error toggling favorite:', err)
 		todo.favorite = originalFavorite
@@ -173,16 +235,49 @@ const executeDelete = async () => {
 	}
 }
 
-// Countdown text placeholder
-const getCountdownText = (todo) => {
-	if (todo.status === 'done' && todo.completedAt) {
-		const completedDate = new Date(todo.completedAt)
-		const now = new Date()
-		const daysSinceCompleted = Math.floor((now - completedDate) / (1000 * 60 * 60 * 24))
-		const daysLeft = Math.max(0, 3 - daysSinceCompleted)
-		return `🗑️ ${daysLeft} day${daysLeft !== 1 ? 's' : ''}`
+// Format remaining time in largest unit + next unit
+function formatTimeRemaining(ms) {
+	if (ms <= 0) return 'Expired'
+	const totalMinutes = Math.floor(ms / (1000 * 60))
+
+	const weeks = Math.floor(totalMinutes / (7 * 24 * 60))
+	const days = Math.floor((totalMinutes % (7 * 24 * 60)) / (24 * 60))
+	const hours = Math.floor((totalMinutes % (24 * 60)) / 60)
+	const minutes = totalMinutes % 60
+	const seconds = Math.floor((ms % (1000 * 60)) / 1000)
+
+	if (weeks > 0) {
+		const weekPart = `${weeks} week${weeks !== 1 ? 's' : ''}`
+		const dayPart = days ? ` ${days} day${days !== 1 ? 's' : ''}` : ''
+		return weekPart + dayPart
 	}
-	return '🗑️ 3 days'
+	if (days > 0) {
+		const dayPart = `${days} day${days !== 1 ? 's' : ''}`
+		const hourPart = hours ? ` ${hours} hour${hours !== 1 ? 's' : ''}` : ''
+		return dayPart + hourPart
+	}
+	if (hours > 0) {
+		const hourPart = `${hours} hour${hours !== 1 ? 's' : ''}`
+		const minutePart = minutes ? ` ${minutes} minute${minutes !== 1 ? 's' : ''}` : ''
+		return hourPart + minutePart
+	}
+	if (minutes > 0) {
+		const minutePart = `${minutes} minute${minutes !== 1 ? 's' : ''}`
+		const secondPart = seconds ? ` ${seconds} second${seconds !== 1 ? 's' : ''}` : ''
+		return minutePart + secondPart
+	}
+	return `${seconds} second${seconds !== 1 ? 's' : ''}`
+}
+
+// Enhanced countdown: returns formatted remaining time
+const getCountdownText = (todo) => {
+	if (todo.status !== 'done' || !todo.completedAt) return ''
+	const now = currentTime.value
+	const completedDate = new Date(todo.completedAt)
+	const expiryDate = new Date(completedDate.getTime() + autoDeleteMinutes.value * 60 * 1000)
+	const diffMs = expiryDate - now
+	if (diffMs <= 0) return 'Expired'
+	return formatTimeRemaining(diffMs)
 }
 
 // Event listener for todo creation
@@ -190,17 +285,47 @@ const handleTodoCreated = () => {
 	loadData()
 }
 
+// Listen for changes to auto‑delete setting from other tabs or the same tab
+const handleAutoDeleteChange = (e) => {
+	autoDeleteMinutes.value = e.detail
+}
+
+const handleStorage = (e) => {
+	if (e.key === AUTO_DELETE_MINUTES_KEY) {
+		autoDeleteMinutes.value = getAutoDeleteMinutes()
+	}
+}
+
+// Watch for local changes to the setting (e.g. if another part of the app changes it)
+watch(autoDeleteMinutes, () => {
+	deleteExpiredTodos()
+})
+
+// Timer to update currentTime every second
+const startTimer = () => {
+	timer = setInterval(() => {
+		currentTime.value = new Date()
+	}, 1000)
+}
+
 onMounted(() => {
 	loadData()
 	window.addEventListener('todo-created', handleTodoCreated)
+	window.addEventListener('auto-delete-minutes-changed', handleAutoDeleteChange)
+	window.addEventListener('storage', handleStorage)
+	startTimer()
 })
 
 onBeforeUnmount(() => {
 	window.removeEventListener('todo-created', handleTodoCreated)
+	window.removeEventListener('auto-delete-minutes-changed', handleAutoDeleteChange)
+	window.removeEventListener('storage', handleStorage)
+	if (timer) clearInterval(timer)
 })
 </script>
 
 <template>
+	<!-- The template remains exactly the same as before – no changes -->
 	<div class="card todo-list-view">
 		<div class="card-header">
 			<div>
@@ -245,8 +370,14 @@ onBeforeUnmount(() => {
 							</svg>
 						</button>
 						<button class="icon-btn delete" @click="confirmDelete(todo)">
-							<svg viewBox="-2.5 0 61 61" xmlns="http://www.w3.org/2000/svg" width="24" height="24">
-								<path fill-rule="evenodd" d="M36 26v10.997c0 1.659-1.337 3.003-3.009 3.003h-9.981c-1.662 0-3.009-1.342-3.009-3.003v-10.997h16zm-2 0v10.998c0 .554-.456 1.002-1.002 1.002h-9.995c-.554 0-1.002-.456-1.002-1.002v-10.998h12zm-9-5c0-.552.451-1 .991-1h4.018c.547 0 .991.444.991 1 0 .552-.451 1-.991 1h-4.018c-.547 0-.991-.444-.991-1zm0 6.997c0-.551.444-.997 1-.997.552 0 1 .453 1 .997v6.006c0 .551-.444.997-1 .997-.552 0-1-.453-1-.997v-6.006zm4 0c0-.551.444-.997 1-.997.552 0 1 .453 1 .997v6.006c0 .551-.444.997-1 .997-.552 0-1-.453-1-.997v-6.006zm-6-5.997h-4.008c-.536 0-.992.448-.992 1 0 .556.444 1 .992 1h18.016c.536 0 .992-.448.992-1 0-.556-.444-1-.992-1h-4.008v-1c0-1.653-1.343-3-3-3h-3.999c-1.652 0-3 1.343-3 3v1z" fill="currentColor"/>
+							<svg fill="#000000" viewBox="0 0 36 36" version="1.1" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+								<title>trash-line</title>
+								<path class="clr-i-outline clr-i-outline-path-1" d="M27.14,34H8.86A2.93,2.93,0,0,1,6,31V11.23H8V31a.93.93,0,0,0,.86,1H27.14A.93.93,0,0,0,28,31V11.23h2V31A2.93,2.93,0,0,1,27.14,34Z"></path>
+								<path class="clr-i-outline clr-i-outline-path-2" d="M30.78,9H5A1,1,0,0,1,5,7H30.78a1,1,0,0,1,0,2Z"></path>
+								<rect class="clr-i-outline clr-i-outline-path-3" x="21" y="13" width="2" height="15"></rect>
+								<rect class="clr-i-outline clr-i-outline-path-4" x="13" y="13" width="2" height="15"></rect>
+								<path class="clr-i-outline clr-i-outline-path-5" d="M23,5.86H21.1V4H14.9V5.86H13V4a2,2,0,0,1,1.9-2h6.2A2,2,0,0,1,23,4Z"></path>
+								<rect x="0" y="0" width="36" height="36" fill-opacity="0"></rect>
 							</svg>
 						</button>
 					</div>
@@ -359,7 +490,7 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-/* Keep all existing styles from your current file */
+/* Keep all existing styles – unchanged */
 .todo-list-view {
 	background: var(--surface);
 	backdrop-filter: blur(12px);
@@ -435,11 +566,16 @@ onBeforeUnmount(() => {
 	align-items: center;
 	justify-content: center;
 	opacity: 0.6;
-	transition: opacity 0.2s;
+	transition: opacity 0.2s, transform 0.1s;
 }
 
 .icon-btn:hover {
 	opacity: 1;
+	transform: scale(1.05);
+}
+
+.icon-btn:active {
+	transform: scale(0.95);
 }
 
 .icon-btn.star svg,
@@ -450,13 +586,15 @@ onBeforeUnmount(() => {
 	stroke: currentColor;
 }
 
-.icon-btn.star.active svg {
-	fill: #f5b342;
-}
-
 .icon-btn.delete svg {
+	width: 28px;
+	height: 28px;
 	fill: currentColor;
 	stroke: none;
+}
+
+.icon-btn.star.active svg {
+	fill: #f5b342;
 }
 
 .todo-description {

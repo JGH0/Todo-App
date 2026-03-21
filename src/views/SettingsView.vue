@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch } from 'vue'
+import { computed, ref, watch, onUnmounted } from 'vue'
 import {
   buildModelsEndpointCandidates,
   DEFAULT_AI_SERVER_URL,
@@ -8,10 +8,83 @@ import {
   parseModels,
   saveAiSettings,
 } from '@/utils/aiSettings'
+import { getAutoDeleteMinutes, setAutoDeleteMinutes, AUTO_DELETE_MINUTES_KEY } from '@/utils/appSettings'
 
 const form = ref(loadAiSettings())
 const modelsLoading = ref(false)
 const connectionStatus = ref(getInitialStatus())
+
+// Auto‑deletion: stored in minutes
+const autoDeleteMinutes = ref(getAutoDeleteMinutes())
+
+// Display values
+const autoDeleteValue = ref(0)
+const autoDeleteUnit = ref('days')
+
+// Convert stored minutes to display value and unit (preserving whole units)
+function syncDisplayFromMinutes(minutes) {
+  if (minutes === 0) {
+    autoDeleteValue.value = 0
+    autoDeleteUnit.value = 'minutes'
+    return
+  }
+  // weeks
+  const weeks = minutes / (7 * 24 * 60)
+  if (Number.isInteger(weeks)) {
+    autoDeleteValue.value = weeks
+    autoDeleteUnit.value = 'weeks'
+    return
+  }
+  // days
+  const days = minutes / (24 * 60)
+  if (Number.isInteger(days)) {
+    autoDeleteValue.value = days
+    autoDeleteUnit.value = 'days'
+    return
+  }
+  // hours
+  const hours = minutes / 60
+  if (Number.isInteger(hours)) {
+    autoDeleteValue.value = hours
+    autoDeleteUnit.value = 'hours'
+    return
+  }
+  // minutes
+  autoDeleteValue.value = minutes
+  autoDeleteUnit.value = 'minutes'
+}
+
+syncDisplayFromMinutes(autoDeleteMinutes.value)
+
+// Watch display changes and update stored minutes
+watch([autoDeleteValue, autoDeleteUnit], () => {
+  let minutes = autoDeleteValue.value
+  if (autoDeleteUnit.value === 'weeks') minutes *= 7 * 24 * 60
+  else if (autoDeleteUnit.value === 'days') minutes *= 24 * 60
+  else if (autoDeleteUnit.value === 'hours') minutes *= 60
+  if (!isNaN(minutes) && minutes >= 0) {
+    setAutoDeleteMinutes(minutes)
+    autoDeleteMinutes.value = minutes
+    window.dispatchEvent(new CustomEvent('auto-delete-minutes-changed', { detail: minutes }))
+  }
+})
+
+// If stored minutes change from another tab, update display
+watch(autoDeleteMinutes, (newMinutes) => {
+  syncDisplayFromMinutes(newMinutes)
+})
+
+// Listen for storage events from other tabs
+const handleStorage = (e) => {
+  if (e.key === AUTO_DELETE_MINUTES_KEY) {
+    autoDeleteMinutes.value = getAutoDeleteMinutes()
+  }
+}
+window.addEventListener('storage', handleStorage)
+
+onUnmounted(() => {
+  window.removeEventListener('storage', handleStorage)
+})
 
 const activeConfig = computed(() => getActiveAiConfig(form.value))
 const activeEndpointSignature = computed(
@@ -313,9 +386,34 @@ watch(
         </div>
 
         <p class="hint">
-          Compatible endpoints are detected from the active connection target. OpenAI-style and Ollama-style model lists are both
+          Compatible endpoints are detected from the active connection target. OpenAI‑style and Ollama‑style model lists are both
           supported. Use a base URL such as <code>https://api.openai.com/v1</code>, not the full endpoint path.
         </p>
+      </article>
+
+      <article class="panel">
+        <h2>Auto‑Deletion</h2>
+        <div class="row">
+          <label>Delete completed todos after</label>
+          <div class="unit-input-group">
+            <input
+              v-model.number="autoDeleteValue"
+              type="number"
+              min="0"
+              step="1"
+              class="value-input"
+            />
+            <select v-model="autoDeleteUnit" class="unit-select">
+              <option value="weeks">weeks</option>
+              <option value="days">days</option>
+              <option value="hours">hours</option>
+              <option value="minutes">minutes</option>
+            </select>
+          </div>
+          <p class="hint">
+            0 means immediate deletion. The countdown will show the remaining time in the largest units.
+          </p>
+        </div>
       </article>
     </div>
   </section>
@@ -428,6 +526,19 @@ select:disabled {
 
 code {
   font-family: monospace;
+}
+
+/* Styles for the unit input group */
+.unit-input-group {
+  display: flex;
+  gap: 8px;
+  align-items: center;
+}
+.value-input {
+  flex: 2;
+}
+.unit-select {
+  flex: 1;
 }
 
 @media (max-width: 960px) {
