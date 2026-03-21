@@ -37,11 +37,21 @@
 				</div>
 
 				<div class="category-actions">
-					<button v-if="editingId !== cat.id" class="icon-btn" @click="startEdit(cat)" title="Rename">
-						✏️
+					<button v-if="editingId !== cat.id" class="icon-btn edit" @click="startEdit(cat)" title="Rename">
+						<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="24" height="24">
+							<path d="M15.6287 5.12132L4.31497 16.435M15.6287 5.12132L19.1642 8.65685M15.6287 5.12132L17.0429 3.70711C17.4334 3.31658 18.0666 3.31658 18.4571 3.70711L20.5784 5.82843C20.969 6.21895 20.969 6.85212 20.5784 7.24264L19.1642 8.65685M7.85051 19.9706L4.31497 16.435M7.85051 19.9706L19.1642 8.65685M7.85051 19.9706L3.25431 21.0312L4.31497 16.435" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+						</svg>
 					</button>
 					<button class="icon-btn delete" @click.stop="confirmDelete(cat)" title="Delete">
-						🗑️
+						<svg fill="#000000" viewBox="0 0 36 36" version="1.1" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink" width="28" height="28">
+							<title>trash-line</title>
+							<path class="clr-i-outline clr-i-outline-path-1" d="M27.14,34H8.86A2.93,2.93,0,0,1,6,31V11.23H8V31a.93.93,0,0,0,.86,1H27.14A.93.93,0,0,0,28,31V11.23h2V31A2.93,2.93,0,0,1,27.14,34Z"></path>
+							<path class="clr-i-outline clr-i-outline-path-2" d="M30.78,9H5A1,1,0,0,1,5,7H30.78a1,1,0,0,1,0,2Z"></path>
+							<rect class="clr-i-outline clr-i-outline-path-3" x="21" y="13" width="2" height="15"></rect>
+							<rect class="clr-i-outline clr-i-outline-path-4" x="13" y="13" width="2" height="15"></rect>
+							<path class="clr-i-outline clr-i-outline-path-5" d="M23,5.86H21.1V4H14.9V5.86H13V4a2,2,0,0,1,1.9-2h6.2A2,2,0,0,1,23,4Z"></path>
+							<rect x="0" y="0" width="36" height="36" fill-opacity="0"></rect>
+						</svg>
 					</button>
 				</div>
 			</div>
@@ -279,6 +289,7 @@ onMounted(() => {
 </script>
 
 <style scoped>
+/* Keep existing styles, add/overwrite for icons */
 .category-management {
 	max-width: 800px;
 	margin: 0 auto;
@@ -356,18 +367,34 @@ onMounted(() => {
 	background: none;
 	border: none;
 	cursor: pointer;
-	font-size: 1.2rem;
-	padding: 4px;
+	padding: 0;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
 	opacity: 0.6;
-	transition: opacity 0.2s;
+	transition: opacity 0.2s, transform 0.1s;
 }
 
 .icon-btn:hover {
 	opacity: 1;
+	transform: scale(1.05);
 }
 
-.delete:hover {
-	color: #d32f2f;
+.icon-btn:active {
+	transform: scale(0.95);
+}
+
+.icon-btn.edit svg {
+	width: 24px;
+	height: 24px;
+	stroke: currentColor;
+}
+
+.icon-btn.delete svg {
+	width: 28px;
+	height: 28px;
+	fill: currentColor;
+	stroke: none;
 }
 
 .add-btn {

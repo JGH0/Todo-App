@@ -34,7 +34,7 @@ import { RouterLink, RouterView } from 'vue-router'
 				<button class="nav-btn" @click="setView('manageCategories')">Manage Categories</button>
 			</nav>
 
-			<div v-if="favoriteCategories.length" class="section-title">⭐ Favorite Categories</div>
+			<div v-if="favoriteCategories.length" class="section-title">Favorite Categories</div>
 			<ul class="list">
 				<li v-for="cat in favoriteCategories" :key="cat.id" @click="setView(cat.name.toLowerCase())">
 					{{ cat.name }}
