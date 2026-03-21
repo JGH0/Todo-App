@@ -1,5 +1,7 @@
 <script setup>
-import { computed, reactive, ref, watch } from 'vue'
+import { computed, reactive, ref, watch, onMounted } from 'vue'
+import { createTodo } from '@/services/todoService'
+import { getCategories } from '@/services/categoryService'
 
 const props = defineProps({
   heading: {
@@ -22,13 +24,16 @@ const props = defineProps({
     type: Array,
     default: () => [],
   },
-  submitTodo: {
-    type: Function,
-    default: null,
-  },
 })
 
-const emit = defineEmits(['cancel', 'create', 'created'])
+const emit = defineEmits(['cancel', 'created'])
+
+// State
+const existingCategories = ref([])
+const isLoadingCategories = ref(false)
+const showCategorySuggestions = ref(false)
+const isSubmitting = ref(false)
+const showSuccess = ref(false)
 
 const form = reactive({
   title: '',
@@ -50,16 +55,15 @@ const errors = reactive({
   submit: '',
 })
 
-const isSubmitting = ref(false)
 const normalizedStatus = computed(() => (form.status === 'done' ? 'Erledigt' : 'Offen'))
 
+// Watch props
 watch(
   () => props.initialStatus,
   (status) => {
     form.status = status
   },
 )
-
 watch(
   () => props.initialCategories,
   (categories) => {
@@ -67,6 +71,23 @@ watch(
   },
   { deep: true },
 )
+
+// Load existing categories from API
+const loadCategories = async () => {
+  isLoadingCategories.value = true
+  try {
+    const cats = await getCategories()
+    existingCategories.value = cats.map(cat => cat.name)
+  } catch (err) {
+    console.error('Failed to load categories:', err)
+  } finally {
+    isLoadingCategories.value = false
+  }
+}
+
+onMounted(() => {
+  loadCategories()
+})
 
 const resetForm = () => {
   form.title = ''
@@ -83,6 +104,7 @@ const resetForm = () => {
   errors.dueDate = ''
   errors.dueTime = ''
   errors.submit = ''
+  showSuccess.value = false
 }
 
 const validate = () => {
@@ -98,9 +120,9 @@ const addCategory = () => {
     form.categoryInput = ''
     return
   }
-
   form.categories = [...form.categories, value]
   form.categoryInput = ''
+  showCategorySuggestions.value = false
 }
 
 const removeCategory = (categoryToRemove) => {
@@ -111,12 +133,17 @@ const toggleStatus = () => {
   form.status = form.status === 'open' ? 'done' : 'open'
 }
 
+const selectCategorySuggestion = (cat) => {
+  if (!form.categories.includes(cat)) {
+    form.categories = [...form.categories, cat]
+  }
+  form.categoryInput = ''
+  showCategorySuggestions.value = false
+}
+
 const handleSubmit = async () => {
   errors.submit = ''
-
-  if (!validate()) {
-    return
-  }
+  if (!validate()) return
 
   const payload = {
     title: form.title,
@@ -133,19 +160,21 @@ const handleSubmit = async () => {
 
   try {
     isSubmitting.value = true
+    console.log('Creating todo with payload:', payload)
 
-    let createdTodo = null
-
-    if (props.submitTodo) {
-      createdTodo = await props.submitTodo(payload)
-    } else {
-      emit('create', payload)
-      createdTodo = payload
-    }
+    const createdTodo = await createTodo(payload)
+    console.log('Todo created successfully:', createdTodo)
 
     resetForm()
+    showSuccess.value = true
+    setTimeout(() => { showSuccess.value = false }, 3000)
+
+    // Dispatch event to refresh todo list
+    window.dispatchEvent(new CustomEvent('todo-created'))
+
     emit('created', createdTodo)
   } catch (error) {
+    console.error('Error creating todo:', error)
     errors.submit = error instanceof Error ? error.message : 'Todo konnte nicht erstellt werden.'
   } finally {
     isSubmitting.value = false
@@ -208,18 +237,31 @@ const handleSubmit = async () => {
             </span>
           </div>
 
-          <div class="input-line">
+          <div class="input-line" style="position: relative;">
             <input
               v-model="form.categoryInput"
               type="text"
               name="category"
-              placeholder="Neue Kategorie hinzufuegen"
+              placeholder="Neue Kategorie hinzufuegen oder aus Liste waehlen"
               @keydown.enter.prevent="addCategory"
+              @focus="showCategorySuggestions = true"
+              @blur="setTimeout(() => showCategorySuggestions = false, 200)"
             >
             <button class="inline-icon-button" type="button" @click="addCategory">
               Hinzufuegen
             </button>
+            <div v-if="showCategorySuggestions && existingCategories.length" class="suggestions-dropdown">
+              <div
+                v-for="cat in existingCategories"
+                :key="cat"
+                class="suggestion-item"
+                @mousedown.prevent="selectCategorySuggestion(cat)"
+              >
+                {{ cat }}
+              </div>
+            </div>
           </div>
+          <small v-if="isLoadingCategories" class="info">Kategorien werden geladen...</small>
         </section>
 
         <div class="todo-form-split">
@@ -287,6 +329,7 @@ const handleSubmit = async () => {
     </div>
 
     <p v-if="errors.submit" class="error">{{ errors.submit }}</p>
+    <p v-if="showSuccess" class="success-banner">✅ Todo erfolgreich erstellt!</p>
 
     <div class="actions">
       <button class="primary-button" type="submit" :disabled="isSubmitting">
@@ -300,6 +343,7 @@ const handleSubmit = async () => {
 </template>
 
 <style scoped>
+/* Keep all existing styles from your original file */
 :root {
   font-family: "Avenir Next", "Segoe UI", sans-serif;
   color: #1a1a1a;
@@ -576,6 +620,7 @@ a {
   display: flex;
   align-items: center;
   gap: 12px;
+  position: relative;
 }
 
 .inline-icon,
@@ -721,16 +766,9 @@ a {
 .ghost-button {
   border: 0;
   border-radius: 999px;
-  padding: 0 18px;
+  padding: 12px 18px;
   cursor: pointer;
-  height: 42px;
-  min-height: 42px;
-  max-height: 42px;
-  display: inline-flex;
-  align-items: center;
-  justify-content: center;
-  line-height: 1;
-  white-space: nowrap;
+  height: 48px;
 }
 
 .primary-button {
@@ -753,12 +791,41 @@ a {
   margin: 0;
 }
 
+.info {
+  color: var(--text-muted);
+  font-size: 0.85rem;
+}
+
 .success-banner {
   background: var(--success);
   color: #19643a;
   border: 1px solid #a7dbb8;
   border-radius: 18px;
   padding: 14px 18px;
+}
+
+.suggestions-dropdown {
+  position: absolute;
+  top: 100%;
+  left: 0;
+  right: 0;
+  background: white;
+  border: 1px solid var(--border);
+  border-radius: 8px;
+  max-height: 200px;
+  overflow-y: auto;
+  z-index: 10;
+  box-shadow: 0 4px 12px rgba(0,0,0,0.1);
+}
+
+.suggestion-item {
+  padding: 8px 12px;
+  cursor: pointer;
+  transition: background 0.2s;
+}
+
+.suggestion-item:hover {
+  background: var(--accent-soft);
 }
 
 .todo-list {

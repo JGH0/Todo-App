@@ -1,5 +1,7 @@
 <script setup>
-import { computed, ref } from 'vue'
+import { computed, ref, onMounted, onBeforeUnmount } from 'vue'
+import { getTodos, updateTodo, deleteTodo } from '@/services/todoService'
+import { getCategories } from '@/services/categoryService'
 
 const props = defineProps({
 	category: {
@@ -8,183 +10,97 @@ const props = defineProps({
 	}
 })
 
-// Dummy todo data – now 15 items
-const todos = ref([
-	{
-		id: 1,
-		title: 'Einbauter gehen',
-		description: '🏠🚶‍♀️',
-		dueDate: '2026-03-15',
-		dueTime: '18:00',
-		status: 'open',
-		favorite: false,
-		categories: ['Home', 'Personal']
-	},
-	{
-		id: 2,
-		title: 'Blumer giessen',
-		description: '🍴🍳',
-		dueDate: '2026-03-14',
-		dueTime: '12:00',
-		status: 'open',
-		favorite: true,
-		categories: ['Work']
-	},
-	{
-		id: 3,
-		title: 'Franz 5.12 a-Z',
-		description: 'do dotz in 2009',
-		dueDate: '2026-03-13',
-		dueTime: '10:00',
-		status: 'done',
-		favorite: false,
-		categories: ['Personal']
-	},
-	{
-		id: 4,
-		title: 'Mathe 5.30',
-		description: 'dotz in 2009',
-		dueDate: '2026-03-16',
-		dueTime: '09:00',
-		status: 'open',
-		favorite: false,
-		categories: ['Work']
-	},
-	{
-		id: 5,
-		title: 'Physik Printing',
-		description: 'kategorien do dotz',
-		dueDate: '2026-03-20',
-		dueTime: null,
-		status: 'done',
-		favorite: true,
-		categories: ['Home']
-	},
-	{
-		id: 6,
-		title: 'Team meeting',
-		description: 'Discuss Q2 roadmap',
-		dueDate: '2026-03-22',
-		dueTime: '14:00',
-		status: 'open',
-		favorite: false,
-		categories: ['Work']
-	},
-	{
-		id: 7,
-		title: 'Grocery shopping',
-		description: 'Buy vegetables, milk, bread',
-		dueDate: '2026-03-18',
-		dueTime: '17:30',
-		status: 'open',
-		favorite: true,
-		categories: ['Home', 'Personal']
-	},
-	{
-		id: 8,
-		title: 'Yoga class',
-		description: 'Bring mat and water',
-		dueDate: '2026-03-19',
-		dueTime: '09:00',
-		status: 'open',
-		favorite: false,
-		categories: ['Personal']
-	},
-	{
-		id: 9,
-		title: 'Finish presentation',
-		description: 'Slides for Monday',
-		dueDate: '2026-03-21',
-		dueTime: '20:00',
-		status: 'open',
-		favorite: false,
-		categories: ['Work']
-	},
-	{
-		id: 10,
-		title: 'Call dentist',
-		description: 'Appointment for check-up',
-		dueDate: '2026-03-17',
-		dueTime: '11:15',
-		status: 'done',
-		favorite: false,
-		categories: ['Personal']
-	},
-	{
-		id: 11,
-		title: 'Pay electricity bill',
-		description: 'Due before 25th',
-		dueDate: '2026-03-24',
-		dueTime: null,
-		status: 'open',
-		favorite: true,
-		categories: ['Home']
-	},
-	{
-		id: 12,
-		title: 'Write blog post',
-		description: 'Topic: Vue 3 patterns',
-		dueDate: '2026-03-26',
-		dueTime: '15:00',
-		status: 'open',
-		favorite: false,
-		categories: ['Work']
-	},
-	{
-		id: 13,
-		title: 'Water plants',
-		description: 'Indoor and balcony',
-		dueDate: '2026-03-15',
-		dueTime: '08:00',
-		status: 'done',
-		favorite: true,
-		categories: ['Home']
-	},
-	{
-		id: 14,
-		title: 'Read book',
-		description: 'Atomic Habits',
-		dueDate: '2026-03-30',
-		dueTime: null,
-		status: 'open',
-		favorite: false,
-		categories: ['Personal']
-	},
-	{
-		id: 15,
-		title: 'Code review',
-		description: 'Pull requests #42, #43',
-		dueDate: '2026-03-16',
-		dueTime: '16:00',
-		status: 'open',
-		favorite: false,
-		categories: ['Work']
-	}
-])
+// State
+const rawTodos = ref([])
+const categoriesList = ref([])
+const isLoading = ref(false)
+const error = ref(null)
 
 // State for edit modal
 const editingTodo = ref(null)
 const categoryInput = ref('')
 
-// Filter todos based on category
-const filteredTodos = computed(() => {
-	if (!props.category) return todos.value
-	return todos.value.filter(todo => todo.categories.includes(props.category))
+// State for delete modal
+const deleteTarget = ref(null)
+const deleteModalVisible = ref(false)
+
+// Normalize todos: ensure each has a `categories` array (strings)
+const normalizedTodos = computed(() => {
+	return rawTodos.value.map(todo => {
+		if (todo.categories && Array.isArray(todo.categories)) {
+			return { ...todo, categories: [...todo.categories] }
+		}
+		if (todo.categoryId) {
+			const cat = categoriesList.value.find(c => c.id == todo.categoryId)
+			if (cat) {
+				return { ...todo, categories: [cat.name] }
+			}
+		}
+		return { ...todo, categories: [] }
+	})
 })
 
+// Filter todos based on category prop
+const filteredTodos = computed(() => {
+	if (!props.category) return normalizedTodos.value
+	return normalizedTodos.value.filter(todo =>
+		todo.categories && todo.categories.includes(props.category)
+	)
+})
+
+// Load todos and categories from API
+const loadData = async () => {
+	isLoading.value = true
+	error.value = null
+	try {
+		const [todosData, catsData] = await Promise.all([
+			getTodos(),
+			getCategories()
+		])
+		rawTodos.value = todosData
+		categoriesList.value = catsData
+	} catch (err) {
+		console.error('Error loading data:', err)
+		error.value = 'Failed to load todos. Please try again.'
+	} finally {
+		isLoading.value = false
+	}
+}
+
 // Toggle completion status
-const toggleComplete = (todo) => {
+const toggleComplete = async (todo) => {
+	const originalStatus = todo.status
 	todo.status = todo.status === 'open' ? 'done' : 'open'
+	try {
+		const payload = { ...todo, categories: todo.categories }
+		delete payload.categoryId
+		await updateTodo(todo.id, payload)
+	} catch (err) {
+		console.error('Error toggling todo status:', err)
+		todo.status = originalStatus
+		error.value = 'Failed to update todo status.'
+		setTimeout(() => { error.value = null }, 3000)
+	}
 }
 
 // Toggle favorite
-const toggleFavorite = (todo) => {
+const toggleFavorite = async (todo) => {
+	const originalFavorite = todo.favorite
 	todo.favorite = !todo.favorite
+	try {
+		const payload = { ...todo, categories: todo.categories }
+		delete payload.categoryId
+		await updateTodo(todo.id, payload)
+	} catch (err) {
+		console.error('Error toggling favorite:', err)
+		todo.favorite = originalFavorite
+		error.value = 'Failed to update favorite.'
+		setTimeout(() => { error.value = null }, 3000)
+	}
 }
 
 // Edit modal methods
 const openEdit = (todo) => {
-	// Create a shallow copy (for editing, we need a copy to avoid mutating original until save)
 	editingTodo.value = { ...todo, categories: [...todo.categories] }
 	categoryInput.value = ''
 }
@@ -210,20 +126,78 @@ const removeCategory = (cat) => {
 	editingTodo.value.categories = editingTodo.value.categories.filter(c => c !== cat)
 }
 
-const saveEdit = () => {
+const saveEdit = async () => {
 	if (!editingTodo.value) return
-	// Here you would normally persist the changes, e.g., call an API or update the original todo
-	console.log('Saving edited todo:', editingTodo.value)
-	// For demo, we actually update the original todo (so changes are visible)
-	const index = todos.value.findIndex(t => t.id === editingTodo.value.id)
-	if (index !== -1) {
-		todos.value[index] = { ...editingTodo.value }
+	const originalTodo = rawTodos.value.find(t => t.id === editingTodo.value.id)
+	if (!originalTodo) return
+
+	try {
+		const updatedPayload = { ...editingTodo.value, categories: editingTodo.value.categories }
+		delete updatedPayload.categoryId
+		const savedTodo = await updateTodo(editingTodo.value.id, updatedPayload)
+		const index = rawTodos.value.findIndex(t => t.id === savedTodo.id)
+		if (index !== -1) {
+			rawTodos.value[index] = savedTodo
+		}
+		closeEdit()
+	} catch (err) {
+		console.error('Error saving todo:', err)
+		error.value = 'Failed to save changes. Please try again.'
+		setTimeout(() => { error.value = null }, 3000)
 	}
-	closeEdit()
 }
 
-// Dummy countdown text (static 3 days)
-const countdownText = '🗑️ 3 days'
+// Delete modal methods
+const confirmDelete = (todo) => {
+	deleteTarget.value = todo
+	deleteModalVisible.value = true
+}
+
+const closeDeleteModal = () => {
+	deleteTarget.value = null
+	deleteModalVisible.value = false
+}
+
+const executeDelete = async () => {
+	if (!deleteTarget.value) return
+	const todoId = deleteTarget.value.id
+	try {
+		await deleteTodo(todoId)
+		rawTodos.value = rawTodos.value.filter(t => t.id !== todoId)
+		closeDeleteModal()
+	} catch (err) {
+		console.error('Error deleting todo:', err)
+		error.value = 'Failed to delete todo. Please try again.'
+		setTimeout(() => { error.value = null }, 3000)
+		closeDeleteModal()
+	}
+}
+
+// Countdown text placeholder
+const getCountdownText = (todo) => {
+	if (todo.status === 'done' && todo.completedAt) {
+		const completedDate = new Date(todo.completedAt)
+		const now = new Date()
+		const daysSinceCompleted = Math.floor((now - completedDate) / (1000 * 60 * 60 * 24))
+		const daysLeft = Math.max(0, 3 - daysSinceCompleted)
+		return `🗑️ ${daysLeft} day${daysLeft !== 1 ? 's' : ''}`
+	}
+	return '🗑️ 3 days'
+}
+
+// Event listener for todo creation
+const handleTodoCreated = () => {
+	loadData()
+}
+
+onMounted(() => {
+	loadData()
+	window.addEventListener('todo-created', handleTodoCreated)
+})
+
+onBeforeUnmount(() => {
+	window.removeEventListener('todo-created', handleTodoCreated)
+})
 </script>
 
 <template>
@@ -234,88 +208,67 @@ const countdownText = '🗑️ 3 days'
 				<h2 v-if="category">{{ category }} Tasks</h2>
 				<h2 v-else>All Tasks</h2>
 			</div>
+			<button v-if="!isLoading" class="refresh-btn" @click="loadData" aria-label="Refresh">
+				<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+					<path d="M23 4v6h-6M1 20v-6h6" stroke-linecap="round" stroke-linejoin="round"/>
+					<path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" stroke-linecap="round" stroke-linejoin="round"/>
+				</svg>
+			</button>
 		</div>
 
-		<div v-if="filteredTodos.length === 0" class="empty-state">
+		<div v-if="error" class="error-banner">{{ error }}</div>
+
+		<div v-if="isLoading" class="loading-state"><p>Loading todos...</p></div>
+
+		<div v-else-if="filteredTodos.length === 0" class="empty-state">
 			<p>No todos found for this category.</p>
 		</div>
 
 		<ul v-else class="todo-list">
 			<li v-for="todo in filteredTodos" :key="todo.id" class="todo-item">
-				<!-- First row: completion circle, title, action icons -->
 				<div class="todo-row todo-row-main">
-					<!-- Completion circle on the left -->
-					<button 
-						class="completion-circle" 
+					<button
+						class="completion-circle"
 						:class="{ completed: todo.status === 'done' }"
 						@click="toggleComplete(todo)"
-						:aria-label="todo.status === 'done' ? 'Mark as open' : 'Mark as done'"
 					/>
-
-					<!-- Title in the middle -->
 					<span class="todo-title">{{ todo.title }}</span>
-
-					<!-- Action icons on the right -->
 					<div class="todo-actions-right">
-						<!-- Star SVG (filled when favorite) -->
-						<button 
-							class="icon-btn star" 
-							@click="toggleFavorite(todo)"
-							aria-label="Toggle favorite"
-						>
-							<svg 
-								width="24" 
-								height="24" 
-								viewBox="0 0 24 24" 
-								:fill="todo.favorite ? '#f5b342' : 'none'" 
-								stroke="currentColor" 
-								stroke-width="2"
-							>
+						<button class="icon-btn star" :class="{ active: todo.favorite }" @click="toggleFavorite(todo)">
+							<svg width="24" height="24" viewBox="0 0 24 24" :fill="todo.favorite ? '#f5b342' : 'none'" stroke="currentColor" stroke-width="2">
 								<path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22 12 18.07 5.82 22 7 14.14 2 9.27l6.91-1.01L12 2z" />
 							</svg>
 						</button>
-						<!-- Edit button with SVG -->
-						<button class="icon-btn edit" aria-label="Edit task" @click="openEdit(todo)">
-							<svg viewBox="0 0 24 24" id="_24x24_On_Light_Edit" data-name="24x24/On Light/Edit" xmlns="http://www.w3.org/2000/svg" fill="#000000">
-								<g id="SVGRepo_bgCarrier" stroke-width="0"></g>
-								<g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g>
-								<g id="SVGRepo_iconCarrier">
-									<path id="Shape" d="M.75,17.5A.751.751,0,0,1,0,16.75V12.569a.755.755,0,0,1,.22-.53L11.461.8a2.72,2.72,0,0,1,3.848,0L16.7,2.191a2.72,2.72,0,0,1,0,3.848L5.462,17.28a.747.747,0,0,1-.531.22ZM1.5,12.879V16h3.12l7.91-7.91L9.41,4.97ZM13.591,7.03l2.051-2.051a1.223,1.223,0,0,0,0-1.727L14.249,1.858a1.222,1.222,0,0,0-1.727,0L10.47,3.91Z" transform="translate(3.25 3.25)" fill="#141124"></path>
-								</g>
+						<button class="icon-btn edit" @click="openEdit(todo)">
+							<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="24" height="24">
+								<path d="M15.6287 5.12132L4.31497 16.435M15.6287 5.12132L19.1642 8.65685M15.6287 5.12132L17.0429 3.70711C17.4334 3.31658 18.0666 3.31658 18.4571 3.70711L20.5784 5.82843C20.969 6.21895 20.969 6.85212 20.5784 7.24264L19.1642 8.65685M7.85051 19.9706L4.31497 16.435M7.85051 19.9706L19.1642 8.65685M7.85051 19.9706L3.25431 21.0312L4.31497 16.435" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+							</svg>
+						</button>
+						<button class="icon-btn delete" @click="confirmDelete(todo)">
+							<svg viewBox="-2.5 0 61 61" xmlns="http://www.w3.org/2000/svg" width="24" height="24">
+								<path fill-rule="evenodd" d="M36 26v10.997c0 1.659-1.337 3.003-3.009 3.003h-9.981c-1.662 0-3.009-1.342-3.009-3.003v-10.997h16zm-2 0v10.998c0 .554-.456 1.002-1.002 1.002h-9.995c-.554 0-1.002-.456-1.002-1.002v-10.998h12zm-9-5c0-.552.451-1 .991-1h4.018c.547 0 .991.444.991 1 0 .552-.451 1-.991 1h-4.018c-.547 0-.991-.444-.991-1zm0 6.997c0-.551.444-.997 1-.997.552 0 1 .453 1 .997v6.006c0 .551-.444.997-1 .997-.552 0-1-.453-1-.997v-6.006zm4 0c0-.551.444-.997 1-.997.552 0 1 .453 1 .997v6.006c0 .551-.444.997-1 .997-.552 0-1-.453-1-.997v-6.006zm-6-5.997h-4.008c-.536 0-.992.448-.992 1 0 .556.444 1 .992 1h18.016c.536 0 .992-.448.992-1 0-.556-.444-1-.992-1h-4.008v-1c0-1.653-1.343-3-3-3h-3.999c-1.652 0-3 1.343-3 3v1z" fill="currentColor"/>
 							</svg>
 						</button>
 					</div>
 				</div>
-
-				<!-- Second row: description -->
-				<div v-if="todo.description" class="todo-row todo-description">
-					{{ todo.description }}
-				</div>
-
-				<!-- Third row: metadata (date/categories) and countdown -->
+				<div v-if="todo.description" class="todo-row todo-description">{{ todo.description }}</div>
 				<div class="todo-row todo-metadata">
 					<div class="meta-left">
 						<span v-if="todo.dueDate" class="meta-chip">
-							<!-- Calendar SVG -->
 							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
 								<path d="M3 9H21M17 13.0014L7 13M10.3333 17.0005L7 17M7 3V5M17 3V5M6.2 21H17.8C18.9201 21 19.4802 21 19.908 20.782C20.2843 20.5903 20.5903 20.2843 20.782 19.908C21 19.4802 21 18.9201 21 17.8V8.2C21 7.07989 21 6.51984 20.782 6.09202C20.5903 5.71569 20.2843 5.40973 19.908 5.21799C19.4802 5 18.9201 5 17.8 5H6.2C5.0799 5 4.51984 5 4.09202 5.21799C3.71569 5.40973 3.40973 5.71569 3.21799 6.09202C3 6.51984 3 7.07989 3 8.2V17.8C3 18.9201 3 19.4802 3.21799 19.908C3.40973 20.2843 3.71569 20.5903 4.09202 20.782C4.51984 21 5.07989 21 6.2 21Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 							</svg>
 							{{ todo.dueDate }}
 							<span v-if="todo.dueTime" class="time-part">
-								<!-- Clock SVG -->
 								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
 									<path d="M18.9997 20.5815L16.4179 18.0113M4.9997 20.5815L7.58154 18.0113M11.9997 9.58148V12.5815L13.4416 13.9998M6.74234 3.99735C6.36727 3.62228 5.85856 3.41156 5.32812 3.41156C4.79769 3.41156 4.28898 3.62228 3.91391 3.99735C3.53884 4.37242 3.32813 4.88113 3.32812 5.41156C3.32812 5.942 3.53884 6.4507 3.91391 6.82578M20.0858 6.82413C20.4609 6.44905 20.6716 5.94035 20.6716 5.40991C20.6716 4.87948 20.4609 4.37077 20.0858 3.9957C19.7107 3.62063 19.202 3.40991 18.6716 3.40991C18.1411 3.40991 17.6324 3.62063 17.2574 3.9957M18.9997 12.5815C18.9997 16.4475 15.8657 19.5815 11.9997 19.5815C8.1337 19.5815 4.9997 16.4475 4.9997 12.5815C4.9997 8.71549 8.1337 5.58149 11.9997 5.58149C15.8657 5.58149 18.9997 8.71549 18.9997 12.5815Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
 								</svg>
 								{{ todo.dueTime }}
 							</span>
 						</span>
-						<span v-for="cat in todo.categories" :key="cat" class="category-chip">
-							{{ cat }}
-						</span>
+						<span v-for="cat in todo.categories" :key="cat" class="category-chip">{{ cat }}</span>
 					</div>
-					<div v-if="todo.status === 'done'" class="meta-right countdown">
-						{{ countdownText }}
-					</div>
+					<div v-if="todo.status === 'done'" class="meta-right countdown">{{ getCountdownText(todo) }}</div>
 				</div>
 			</li>
 		</ul>
@@ -328,21 +281,15 @@ const countdownText = '🗑️ 3 days'
 						<h3>Edit Task</h3>
 						<button class="close-btn" @click="closeEdit">✕</button>
 					</div>
-
 					<div class="modal-body">
-						<!-- Title -->
 						<div class="field">
 							<label class="field-label">Title</label>
 							<input v-model="editingTodo.title" type="text" placeholder="Task title" />
 						</div>
-
-						<!-- Description -->
 						<div class="field">
 							<label class="field-label">Description</label>
 							<textarea v-model="editingTodo.description" rows="3" placeholder="Description"></textarea>
 						</div>
-
-						<!-- Date and Time -->
 						<div class="split-row">
 							<div class="field">
 								<label class="field-label">Date</label>
@@ -353,8 +300,6 @@ const countdownText = '🗑️ 3 days'
 								<input v-model="editingTodo.dueTime" type="time" />
 							</div>
 						</div>
-
-						<!-- Categories -->
 						<div class="field">
 							<label class="field-label">Categories</label>
 							<div class="category-list">
@@ -364,17 +309,10 @@ const countdownText = '🗑️ 3 days'
 								</span>
 							</div>
 							<div class="input-line">
-								<input
-									v-model="categoryInput"
-									type="text"
-									placeholder="Add category"
-									@keydown.enter.prevent="addCategory"
-								/>
+								<input v-model="categoryInput" type="text" placeholder="Add category" @keydown.enter.prevent="addCategory" />
 								<button class="inline-icon-button" type="button" @click="addCategory">Add</button>
 							</div>
 						</div>
-
-						<!-- Status and Favorite -->
 						<div class="split-row">
 							<div class="field">
 								<label class="field-label">Status</label>
@@ -391,10 +329,28 @@ const countdownText = '🗑️ 3 days'
 							</div>
 						</div>
 					</div>
-
 					<div class="modal-footer">
 						<button class="secondary-button" @click="closeEdit">Cancel</button>
 						<button class="primary-button" @click="saveEdit">Save</button>
+					</div>
+				</div>
+			</div>
+		</Teleport>
+
+		<!-- Delete Confirmation Modal -->
+		<Teleport to="body">
+			<div v-if="deleteModalVisible" class="modal-overlay" @click.self="closeDeleteModal">
+				<div class="modal-card">
+					<div class="modal-header">
+						<h3>Delete Task</h3>
+						<button class="close-btn" @click="closeDeleteModal">✕</button>
+					</div>
+					<div class="modal-body">
+						<p>Are you sure you want to delete "<strong>{{ deleteTarget?.title }}</strong>"?<br>This action cannot be undone.</p>
+					</div>
+					<div class="modal-footer">
+						<button class="secondary-button" @click="closeDeleteModal">Cancel</button>
+						<button class="danger-button" @click="executeDelete">Delete</button>
 					</div>
 				</div>
 			</div>
@@ -403,6 +359,7 @@ const countdownText = '🗑️ 3 days'
 </template>
 
 <style scoped>
+/* Keep all existing styles from your current file */
 .todo-list-view {
 	background: var(--surface);
 	backdrop-filter: blur(12px);
@@ -486,7 +443,8 @@ const countdownText = '🗑️ 3 days'
 }
 
 .icon-btn.star svg,
-.icon-btn.edit svg {
+.icon-btn.edit svg,
+.icon-btn.delete svg {
 	width: 24px;
 	height: 24px;
 	stroke: currentColor;
@@ -494,6 +452,11 @@ const countdownText = '🗑️ 3 days'
 
 .icon-btn.star.active svg {
 	fill: #f5b342;
+}
+
+.icon-btn.delete svg {
+	fill: currentColor;
+	stroke: none;
 }
 
 .todo-description {
@@ -563,6 +526,38 @@ const countdownText = '🗑️ 3 days'
 	color: var(--text-muted);
 	background: rgba(255,255,255,0.4);
 	border-radius: 18px;
+}
+
+.loading-state {
+	padding: 40px 20px;
+	text-align: center;
+	color: var(--text-muted);
+}
+
+.error-banner {
+	background: #fee;
+	border: 1px solid #fcc;
+	color: #c33;
+	padding: 12px;
+	border-radius: 12px;
+	margin-bottom: 16px;
+	text-align: center;
+}
+
+.refresh-btn {
+	background: transparent;
+	border: none;
+	cursor: pointer;
+	padding: 8px;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: background 0.2s;
+}
+
+.refresh-btn:hover {
+	background: rgba(0, 0, 0, 0.05);
 }
 
 @media (max-width: 640px) {
@@ -678,18 +673,6 @@ const countdownText = '🗑️ 3 days'
 	margin-bottom: 8px;
 }
 
-.category-chip {
-	display: inline-flex;
-	align-items: center;
-	gap: 6px;
-	background: var(--chip);
-	border: 1px solid var(--border);
-	padding: 6px 12px;
-	font-size: 0.9rem;
-	border-radius: 999px;
-	color: #000;
-}
-
 .chip-remove {
 	background: transparent;
 	border: none;
@@ -729,9 +712,10 @@ const countdownText = '🗑️ 3 days'
 	align-items: center;
 	gap: 8px;
 	cursor: pointer;
-	span {
-	color:#000
-	}
+}
+
+.checkbox-field label span {
+	color: #000;
 }
 
 .modal-footer {
@@ -742,7 +726,8 @@ const countdownText = '🗑️ 3 days'
 }
 
 .primary-button,
-.secondary-button {
+.secondary-button,
+.danger-button {
 	border: none;
 	border-radius: 999px;
 	padding: 10px 20px;
@@ -758,5 +743,14 @@ const countdownText = '🗑️ 3 days'
 .secondary-button {
 	background: #e5e5e2;
 	color: #303030;
+}
+
+.danger-button {
+	background: #d32f2f;
+	color: white;
+}
+
+.danger-button:hover {
+	background: #b71c1c;
 }
 </style>

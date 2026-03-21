@@ -1,14 +1,8 @@
 import api from '@/services/api'
 
 export const getCategories = async () => {
-  const { data } = await api.get('/categories', {
-    params: {
-      _sort: 'name',
-      _order: 'asc',
-    },
-  })
-
-  return data
+  const { data } = await api.get('/categories')
+  return data.sort((a, b) => a.name.localeCompare(b.name))
 }
 
 export const createCategory = async (category) => {
