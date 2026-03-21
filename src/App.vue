@@ -30,6 +30,7 @@ import { RouterLink, RouterView } from 'vue-router'
 			<nav class="top-links">
 				<button class="nav-btn" @click="setView('addTask')">+ Add a Task</button>
 				<button class="nav-btn" @click="setView('askAi')">Ask AI</button>
+				<button class="nav-btn" @click="setView('recurringTasks')">Recurring Tasks</button>
 				<button class="nav-btn" @click="setView('todos')">All Todos</button>
 				<button class="nav-btn" @click="setView('manageCategories')">Manage Categories</button>
 			</nav>
@@ -66,6 +67,7 @@ import AiAssistantView from './views/AiAssistantView.vue'
 import TodoCreateForm from './views/TodoCreateForm.vue'
 import TodosListView from './views/TodosListView.vue'
 import CategoryManagementView from './views/CategoryManagementView.vue'
+import RecurringTasksView from './views/RecurringTasksView.vue'
 import { getCategories } from '@/services/categoryService'
 
 const SimpleView = {
@@ -87,6 +89,7 @@ export default {
 		SearchView: { components: { SimpleView }, template: `<SimpleView title="Search" />` },
 		FiltersView: { components: { SimpleView }, template: `<SimpleView title="Filters" />` },
 		AiAssistantView,
+		RecurringTasksView
 	},
 
 	data() {
@@ -94,7 +97,7 @@ export default {
 			currentView: 'todos',
 			currentCategory: null,
 			sidebarOpen: false,
-			categories: [] // will hold categories from backend
+			categories: []
 		}
 	},
 
@@ -105,7 +108,8 @@ export default {
 				addTask: 'TodoCreateForm',
 				askAi: 'AiAssistantView',
 				todos: 'TodosListView',
-				manageCategories: 'CategoryManagementView'
+				manageCategories: 'CategoryManagementView',
+				recurringTasks: 'RecurringTasksView'
 			}
 			return views[this.currentView]
 		},

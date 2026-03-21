@@ -32,6 +32,10 @@ const autoDeleteMinutes = ref(getAutoDeleteMinutes())
 const currentTime = ref(new Date())
 let timer = null
 
+// Search & sort
+const searchQuery = ref('')
+const sortBy = ref('default') // default, title-asc, title-desc, dueDate-asc, dueDate-desc, status-open-first, status-done-first
+
 // Normalize todos: ensure each has a `categories` array (strings)
 const normalizedTodos = computed(() => {
 	return rawTodos.value.map(todo => {
@@ -48,12 +52,56 @@ const normalizedTodos = computed(() => {
 	})
 })
 
-// Filter todos based on category prop
+// Filter and sort todos
 const filteredTodos = computed(() => {
-	if (!props.category) return normalizedTodos.value
-	return normalizedTodos.value.filter(todo =>
-		todo.categories && todo.categories.includes(props.category)
-	)
+	let result = normalizedTodos.value
+
+	// Category filter
+	if (props.category) {
+		result = result.filter(todo =>
+			todo.categories && todo.categories.includes(props.category)
+		)
+	}
+
+	// Search filter (title only)
+	if (searchQuery.value.trim()) {
+		const query = searchQuery.value.trim().toLowerCase()
+		result = result.filter(todo =>
+			todo.title.toLowerCase().includes(query)
+		)
+	}
+
+	// Sorting
+	if (sortBy.value !== 'default') {
+		result = [...result].sort((a, b) => {
+			switch (sortBy.value) {
+				case 'title-asc':
+					return a.title.localeCompare(b.title)
+				case 'title-desc':
+					return b.title.localeCompare(a.title)
+				case 'dueDate-asc':
+					const dateA = a.dueDate ? new Date(a.dueDate) : new Date(8640000000000000)
+					const dateB = b.dueDate ? new Date(b.dueDate) : new Date(8640000000000000)
+					return dateA - dateB
+				case 'dueDate-desc':
+					const dateA2 = a.dueDate ? new Date(a.dueDate) : new Date(0)
+					const dateB2 = b.dueDate ? new Date(b.dueDate) : new Date(0)
+					return dateB2 - dateA2
+				case 'status-open-first':
+					if (a.status === 'open' && b.status !== 'open') return -1
+					if (a.status !== 'open' && b.status === 'open') return 1
+					return 0
+				case 'status-done-first':
+					if (a.status === 'done' && b.status !== 'done') return -1
+					if (a.status !== 'done' && b.status === 'done') return 1
+					return 0
+				default:
+					return 0
+			}
+		})
+	}
+
+	return result
 })
 
 // Helper: delete todos that have been done for more than `autoDeleteMinutes`
@@ -325,7 +373,6 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
-	<!-- The template remains exactly the same as before – no changes -->
 	<div class="card todo-list-view">
 		<div class="card-header">
 			<div>
@@ -333,12 +380,29 @@ onBeforeUnmount(() => {
 				<h2 v-if="category">{{ category }} Tasks</h2>
 				<h2 v-else>All Tasks</h2>
 			</div>
-			<button v-if="!isLoading" class="refresh-btn" @click="loadData" aria-label="Refresh">
-				<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
-					<path d="M23 4v6h-6M1 20v-6h6" stroke-linecap="round" stroke-linejoin="round"/>
-					<path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" stroke-linecap="round" stroke-linejoin="round"/>
-				</svg>
-			</button>
+			<div class="header-controls">
+				<input
+					v-model="searchQuery"
+					type="text"
+					placeholder="Search tasks..."
+					class="search-input"
+				/>
+				<select v-model="sortBy" class="sort-select">
+					<option value="default">Default (recent first)</option>
+					<option value="title-asc">Title A→Z</option>
+					<option value="title-desc">Title Z→A</option>
+					<option value="dueDate-asc">Due date (earliest first)</option>
+					<option value="dueDate-desc">Due date (latest first)</option>
+					<option value="status-open-first">Open tasks first</option>
+					<option value="status-done-first">Done tasks first</option>
+				</select>
+				<button v-if="!isLoading" class="refresh-btn" @click="loadData" aria-label="Refresh">
+					<svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2">
+						<path d="M23 4v6h-6M1 20v-6h6" stroke-linecap="round" stroke-linejoin="round"/>
+						<path d="M20.49 9A9 9 0 0 0 5.64 5.64L1 10m22 4l-4.64 4.36A9 9 0 0 1 3.51 15" stroke-linecap="round" stroke-linejoin="round"/>
+					</svg>
+				</button>
+			</div>
 		</div>
 
 		<div v-if="error" class="error-banner">{{ error }}</div>
@@ -890,5 +954,49 @@ onBeforeUnmount(() => {
 
 .danger-button:hover {
 	background: #b71c1c;
+}
+
+.header-controls {
+	display: flex;
+	gap: 12px;
+	align-items: center;
+	margin-bottom: 1rem;
+}
+
+.search-input {
+	padding: 8px 12px;
+	border: 1px solid var(--border);
+	border-radius: 999px;
+	background: white;
+	font-size: 0.9rem;
+	min-width: 180px;
+}
+
+.search-input:focus {
+	outline: none;
+	border-color: var(--accent);
+}
+
+.sort-select {
+	padding: 8px 12px;
+	border: 1px solid var(--border);
+	border-radius: 999px;
+	background: white;
+	font-size: 0.9rem;
+	cursor: pointer;
+}
+
+@media (max-width: 768px) {
+	.card-header {
+		flex-direction: column;
+		align-items: stretch;
+		gap: 12px;
+	}
+	.header-controls {
+		flex-wrap: wrap;
+	}
+	.search-input {
+		flex: 1;
+	}
 }
 </style>

@@ -1,0 +1,43 @@
+{
+	"todos": [
+		{
+			"id": "1",
+			"title": "Bestehende Aufgaben analysieren",
+			"description": "Aktuellen Aufbau der Todo-App sichten und Felder abstimmen.",
+			"status": "open",
+			"dueDate": "2026-03-19",
+			"dueTime": "10:30",
+			"syncEnabled": true,
+			"reminderEnabled": false,
+			"recurringEnabled": false,
+			"projectId": "web-redesign",
+			"createdAt": "2026-03-18T10:00:00.000Z",
+			"categories": ["Work"]
+		}
+	],
+	"categories": [
+		{ "id": "1", "name": "Work", "favorite": true },
+		{ "id": "2", "name": "Home", "favorite": false },
+		{ "id": "3", "name": "Personal", "favorite": false }
+	],
+	"recurringTasks": [
+		{
+			"id": "1",
+			"title": "Weekly review",
+			"description": "Plan next week's tasks",
+			"schedule": "weekly",
+			"customDays": [],
+			"categories": ["Work"],
+			"favorite": true
+		},
+		{
+			"id": "2",
+			"title": "Clean the house",
+			"description": "Every Saturday",
+			"schedule": "custom",
+			"customDays": ["sat"],
+			"categories": ["Home"],
+			"favorite": false
+		}
+	]
+}
