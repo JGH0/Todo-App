@@ -136,7 +136,6 @@ async function ensureCategory(categoryName) {
   try {
     const newCat = await createCategory({ name: categoryName, favorite: false })
     categoriesList.value.push(newCat)
-    // Notify the sidebar that categories have changed
     window.dispatchEvent(new CustomEvent('categories-updated'))
     return newCat.name
   } catch (err) {
@@ -160,7 +159,7 @@ async function createTaskFromData(payload) {
     status: 'open',
     categories: [finalCategory],
     dueDate: payload.dueDate || null,
-    dueTime: null,
+    dueTime: payload.dueTime || null,
     syncEnabled: false,
     reminderEnabled: false,
     recurringEnabled: false,
@@ -206,7 +205,6 @@ function confirmAction(type, task, newData = null) {
 async function executeUpdate(taskId, updates) {
   const task = tasks.value.find(t => t.id === taskId)
   if (!task) return 'Task not found.'
-  // If category is provided, ensure it exists
   let category = updates.category
   if (category) {
     const finalCategory = await ensureCategory(category)
@@ -287,47 +285,57 @@ function buildPlannerPrompt(userText) {
     }
   })
   const categoriesListStr = [...categoriesSet].map(c => `"${c}"`).join(', ')
+  const now = new Date()
+  const currentDate = now.toLocaleDateString()
+  const currentTime = now.toLocaleTimeString()
 
   return [
-    'You are a task assistant. Decide actions for the todo app.',
+    'You are a task assistant. Output only a single JSON object with the appropriate action. No extra text, no markdown.',
+    '',
     'Allowed actions: create, read, update, delete, advice.',
-    'You may return a single action object or an array of actions in an "actions" field.',
-    'Output valid JSON only. No markdown.',
-    'Example: {"actions":[{"action":"create","title":"Feed cat","category":"Home"},{"action":"create","title":"Feed dog","category":"Home"}]}',
     '',
     'Action schemas:',
-    '- create: {"action":"create","title":"","category":"","dueDate":""}',
+    '- create: {"action":"create","title":"","category":"","dueDate":"","dueTime":""}',
     '- read: {"action":"read"}',
-    '- update: {"action":"update","taskId":0,"updates":{"title":"","category":"","dueDate":""}} or use title',
+    '- update: {"action":"update","taskId":0,"updates":{"title":"","category":"","dueDate":"","dueTime":""}} or use title',
     '- delete: {"action":"delete","taskId":0} or use title',
     '- advice: {"action":"advice","advice":""}',
+    '',
+    'Current date/time:',
+    `Date: ${currentDate}`,
+    `Time: ${currentTime}`,
     '',
     `Current tasks: ${JSON.stringify(tasks.value)}`,
     `Available categories: ${categoriesListStr || 'none'}`,
     `Selected task id: ${selectedTaskId.value || 0}`,
     `Advice context: ${taskDraft.value.adviceContext || ''}`,
+    '',
     `User request: ${userText}`,
   ].join('\n')
 }
 
 function extractJsonObject(text) {
-  const cleaned = text.replace(/```json|```/gi, '').trim()
   try {
-    return JSON.parse(cleaned)
-  } catch {
-    const match = cleaned.match(/\{[\s\S]*\}/)
-    if (!match) return null
+    return JSON.parse(text)
+  } catch (e) {
+    const cleaned = text.replace(/```json|```/gi, '').trim()
     try {
-      return JSON.parse(match[0])
-    } catch {
-      return null
+      return JSON.parse(cleaned)
+    } catch (e2) {
+      const match = cleaned.match(/\{[\s\S]*\}/)
+      if (match) {
+        try {
+          return JSON.parse(match[0])
+        } catch (e3) {}
+      }
     }
   }
+  return null
 }
 
 async function runChatCompletion(modelId, userText) {
   const messages = [
-    { role: 'system', content: 'Return only valid JSON object.' },
+    { role: 'system', content: 'You are a JSON‑only task planner. Return exactly one valid JSON object. No other text.' },
     { role: 'user', content: buildPlannerPrompt(userText) },
   ]
   const openAiCompatibleBody = {
@@ -342,7 +350,9 @@ async function runChatCompletion(modelId, userText) {
       headers: authHeaders(),
       body: JSON.stringify(openAiCompatibleBody),
     })
-    return extractJsonObject(payload?.choices?.[0]?.message?.content || '')
+    const content = payload?.choices?.[0]?.message?.content || ''
+    console.log('AI raw response:', content)
+    return extractJsonObject(content)
   } catch {
     const payload = await requestJson(buildOllamaChatEndpointCandidates(activeApiBaseUrl.value), {
       method: 'POST',
@@ -354,7 +364,9 @@ async function runChatCompletion(modelId, userText) {
         options: { temperature: 0.2 },
       }),
     })
-    return extractJsonObject(payload?.message?.content || '')
+    const content = payload?.message?.content || ''
+    console.log('AI raw response:', content)
+    return extractJsonObject(content)
   }
 }
 
@@ -397,10 +409,11 @@ function buildBatchSummary(actions) {
       const task = tasks.value.find(t => t.id === taskId)
       if (task) {
         summary += `✏️ Update task #${task.id} "${task.title}" → `
-        const updates = act.updates || { title: act.title, category: act.category, dueDate: act.dueDate }
+        const updates = act.updates || { title: act.title, category: act.category, dueDate: act.dueDate, dueTime: act.dueTime }
         if (updates.title) summary += `title: "${updates.title}" `
         if (updates.category) summary += `category: "${updates.category}" `
-        if (updates.dueDate) summary += `due: ${updates.dueDate}`
+        if (updates.dueDate) summary += `due: ${updates.dueDate} `
+        if (updates.dueTime) summary += `time: ${updates.dueTime}`
         summary += '\n'
       } else {
         summary += `✏️ Update (task not found: ${act.title || act.taskId})\n`
@@ -422,17 +435,19 @@ async function executePlan(plan) {
   console.log('Plan received:', plan)
   const actions = normalizeActions(plan)
   if (actions.length === 0) {
-    if (plan.advice) return plan.advice
-    return getLocalAdvice()
+    if (plan && plan.advice) return plan.advice
+    return 'I could not understand that. Please try again with a clearer request.'
   }
 
   if (actions.length === 1) {
     const act = actions[0]
     if (act.action === 'create') {
+      if (!act.title) return 'Please provide a title for the task.'
       return await createTaskFromData({
         title: act.title,
         category: act.category,
         dueDate: act.dueDate,
+        dueTime: act.dueTime,
       })
     }
     if (act.action === 'read') {
@@ -447,7 +462,7 @@ async function executePlan(plan) {
         else return `No task found with title "${act.title}".`
       }
       if (!taskId) return 'No task specified for update.'
-      const updates = act.updates || { title: act.title, category: act.category, dueDate: act.dueDate }
+      const updates = act.updates || { title: act.title, category: act.category, dueDate: act.dueDate, dueTime: act.dueTime }
       const task = tasks.value.find(t => t.id === taskId)
       if (!task) return `Task #${taskId} not found.`
       try {
@@ -455,6 +470,7 @@ async function executePlan(plan) {
           title: updates.title || task.title,
           category: updates.category || task.categories?.[0] || 'General',
           dueDate: updates.dueDate || task.dueDate,
+          dueTime: updates.dueTime || task.dueTime,
         })
         return await executeUpdate(taskId, updates)
       } catch (e) {
@@ -502,6 +518,7 @@ async function executeBatch() {
         title: act.title,
         category: act.category,
         dueDate: act.dueDate,
+        dueTime: act.dueTime,
       })
       results.push(res)
     } else if (act.action === 'update') {
@@ -521,7 +538,7 @@ async function executeBatch() {
         results.push('No task specified for update. Skipping.')
         continue
       }
-      const updates = act.updates || { title: act.title, category: act.category, dueDate: act.dueDate }
+      const updates = act.updates || { title: act.title, category: act.category, dueDate: act.dueDate, dueTime: act.dueTime }
       const res = await executeUpdate(taskId, updates)
       results.push(res)
     } else if (act.action === 'delete') {
@@ -593,9 +610,17 @@ async function sendMessage() {
       const secondPlan = await runChatCompletion(secondaryModel.value, text)
       finalPlan = mergePlans(primaryPlan, secondPlan)
     }
-    const result = await executePlan(finalPlan)
-    chatMessages.value.push({ role: 'assistant', content: result })
+    if (!finalPlan) {
+      chatMessages.value.push({
+        role: 'assistant',
+        content: 'Sorry, I could not understand that. Please try a simpler request, like "Create a task to buy milk".',
+      })
+    } else {
+      const result = await executePlan(finalPlan)
+      chatMessages.value.push({ role: 'assistant', content: result })
+    }
   } catch (error) {
+    console.error(error)
     chatMessages.value.push({ role: 'assistant', content: `AI request failed: ${error.message}` })
   } finally {
     sending.value = false
