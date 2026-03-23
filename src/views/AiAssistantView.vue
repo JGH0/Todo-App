@@ -17,7 +17,7 @@ const CHAT_HISTORY_KEY = 'ai-assistant-chat-history'
 const aiSettings = ref(loadAiSettings())
 const sending = ref(false)
 const loadingTasks = ref(false)
-const categoriesList = ref([]) // existing categories
+const categoriesList = ref([])
 
 const taskDraft = ref({
   title: '',
@@ -31,13 +31,13 @@ const selectedTaskId = ref(null)
 const chatInput = ref('')
 const chatMessages = ref([])
 
-// Confirmation modal state for single actions
-const pendingAction = ref(null) // { type, task, newData?, resolve, reject }
+// Confirmation modal
+const pendingAction = ref(null)
 const confirmMessage = ref('')
 const confirmModalVisible = ref(false)
 
-// Batch actions state
-const batchActions = ref([]) // array of action objects
+// Batch actions
+const batchActions = ref([])
 const batchSummary = ref('')
 const batchModalVisible = ref(false)
 let batchResolve = null
@@ -51,7 +51,7 @@ const secondaryModel = computed(() => aiSettings.value.secondaryModel || '')
 
 const selectedTask = computed(() => tasks.value.find((task) => task.id === selectedTaskId.value) ?? null)
 
-// Persist chat history to localStorage
+// Persist chat history
 function saveChatHistory() {
   localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(chatMessages.value))
 }
@@ -128,7 +128,6 @@ function syncDraftWithSelectedTask() {
   }
 }
 
-// Helper: ensure category exists, create if not
 async function ensureCategory(categoryName) {
   if (!categoryName) return null
   const existing = categoriesList.value.find(c => c.name.toLowerCase() === categoryName.toLowerCase())
@@ -286,13 +285,14 @@ function buildPlannerPrompt(userText) {
   })
   const categoriesListStr = [...categoriesSet].map(c => `"${c}"`).join(', ')
   const now = new Date()
-  const currentDate = now.toLocaleDateString()
-  const currentTime = now.toLocaleTimeString()
+  const currentDate = now.toISOString().split('T')[0] // YYYY-MM-DD
+  const currentDateTime = now.toLocaleString()
 
   return [
-    'You are a task assistant. Output only a single JSON object with the appropriate action. No extra text, no markdown.',
+    'You are a task assistant. Output only a single JSON object. No extra text, no markdown.',
     '',
     'Allowed actions: create, read, update, delete, advice.',
+    'You may return a single action object or an array of actions under the key "actions".',
     '',
     'Action schemas:',
     '- create: {"action":"create","title":"","category":"","dueDate":"","dueTime":""}',
@@ -301,9 +301,10 @@ function buildPlannerPrompt(userText) {
     '- delete: {"action":"delete","taskId":0} or use title',
     '- advice: {"action":"advice","advice":""}',
     '',
-    'Current date/time:',
-    `Date: ${currentDate}`,
-    `Time: ${currentTime}`,
+    'For batch creation, use {"actions": [create1, create2, ...]}.',
+    '',
+    `Current date: ${currentDate} (YYYY-MM-DD). Current time: ${currentDateTime}`,
+    'Interpret relative dates like "tomorrow", "next Saturday", "this week" using this date.',
     '',
     `Current tasks: ${JSON.stringify(tasks.value)}`,
     `Available categories: ${categoriesListStr || 'none'}`,
@@ -315,13 +316,17 @@ function buildPlannerPrompt(userText) {
 }
 
 function extractJsonObject(text) {
+  // Try to parse the whole text
   try {
     return JSON.parse(text)
   } catch (e) {
+    // Remove code fences
     const cleaned = text.replace(/```json|```/gi, '').trim()
+    // Try to parse cleaned
     try {
       return JSON.parse(cleaned)
     } catch (e2) {
+      // Try to extract JSON using regex
       const match = cleaned.match(/\{[\s\S]*\}/)
       if (match) {
         try {
@@ -662,6 +667,7 @@ onBeforeUnmount(() => {
 </script>
 
 <template>
+  <!-- Template unchanged – same as before -->
   <section class="assistant-page">
     <header class="assistant-head">
       <h1>AI Task Assistant</h1>
