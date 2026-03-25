@@ -34,7 +34,16 @@ let timer = null
 
 // Search & sort
 const searchQuery = ref('')
-const sortBy = ref('default') // default, title-asc, title-desc, dueDate-asc, dueDate-desc, status-open-first, status-done-first
+const sortBy = ref('default')
+
+// View mode: 'list' or 'calendar'
+const viewMode = ref('list')
+
+// Calendar state
+const currentCalendarDate = ref(new Date())
+const dayTasksModalVisible = ref(false)
+const selectedDayTasks = ref([])
+const selectedDayDate = ref('')
 
 // Normalize todos: ensure each has a `categories` array (strings)
 const normalizedTodos = computed(() => {
@@ -52,16 +61,17 @@ const normalizedTodos = computed(() => {
 	})
 })
 
-// Filter and sort todos
-const filteredTodos = computed(() => {
-	let result = normalizedTodos.value
+// Filter todos based on category prop (for both views)
+const categoryFilteredTodos = computed(() => {
+	if (!props.category) return normalizedTodos.value
+	return normalizedTodos.value.filter(todo =>
+		todo.categories && todo.categories.includes(props.category)
+	)
+})
 
-	// Category filter
-	if (props.category) {
-		result = result.filter(todo =>
-			todo.categories && todo.categories.includes(props.category)
-		)
-	}
+// Filter and sort todos for list view
+const filteredTodos = computed(() => {
+	let result = [...categoryFilteredTodos.value]
 
 	// Search filter (title only)
 	if (searchQuery.value.trim()) {
@@ -104,6 +114,111 @@ const filteredTodos = computed(() => {
 	return result
 })
 
+// Calendar navigation
+const goToPreviousMonth = () => {
+	const newDate = new Date(currentCalendarDate.value)
+	newDate.setMonth(newDate.getMonth() - 1)
+	currentCalendarDate.value = newDate
+}
+
+const goToNextMonth = () => {
+	const newDate = new Date(currentCalendarDate.value)
+	newDate.setMonth(newDate.getMonth() + 1)
+	currentCalendarDate.value = newDate
+}
+
+const goToToday = () => {
+	currentCalendarDate.value = new Date()
+}
+
+const getDaysInMonth = (date) => {
+	const year = date.getFullYear()
+	const month = date.getMonth()
+	const firstDay = new Date(year, month, 1)
+	const lastDay = new Date(year, month + 1, 0)
+	const daysInMonth = lastDay.getDate()
+	const startingDayOfWeek = firstDay.getDay()
+	
+	return { daysInMonth, startingDayOfWeek }
+}
+
+const getTodosForDate = (date) => {
+	const dateStr = date.toISOString().split('T')[0]
+	return categoryFilteredTodos.value.filter(todo => todo.dueDate === dateStr)
+}
+
+const calendarDays = computed(() => {
+	const { daysInMonth, startingDayOfWeek } = getDaysInMonth(currentCalendarDate.value)
+	const days = []
+	
+	// Previous month days
+	const prevMonthDate = new Date(currentCalendarDate.value)
+	prevMonthDate.setMonth(prevMonthDate.getMonth() - 1)
+	const prevMonthDays = new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth() + 1, 0).getDate()
+	
+	for (let i = 0; i < startingDayOfWeek; i++) {
+		const day = prevMonthDays - startingDayOfWeek + i + 1
+		const date = new Date(prevMonthDate.getFullYear(), prevMonthDate.getMonth(), day)
+		days.push({
+			date: date,
+			day: day,
+			isCurrentMonth: false,
+			todos: getTodosForDate(date)
+		})
+	}
+	
+	// Current month days
+	for (let i = 1; i <= daysInMonth; i++) {
+		const date = new Date(currentCalendarDate.value.getFullYear(), currentCalendarDate.value.getMonth(), i)
+		days.push({
+			date: date,
+			day: i,
+			isCurrentMonth: true,
+			todos: getTodosForDate(date)
+		})
+	}
+	
+	// Next month days (to fill the grid)
+	const remainingDays = 42 - days.length
+	for (let i = 1; i <= remainingDays; i++) {
+		const date = new Date(currentCalendarDate.value.getFullYear(), currentCalendarDate.value.getMonth() + 1, i)
+		days.push({
+			date: date,
+			day: i,
+			isCurrentMonth: false,
+			todos: getTodosForDate(date)
+		})
+	}
+	
+	return days
+})
+
+const isToday = (date) => {
+	const today = new Date()
+	return date.toDateString() === today.toDateString()
+}
+
+const formatMonthYear = (date) => {
+	return date.toLocaleDateString('en-US', { month: 'long', year: 'numeric' })
+}
+
+const openDayTasksModal = (date, todos) => {
+	selectedDayDate.value = date.toLocaleDateString('en-US', { 
+		weekday: 'long', 
+		year: 'numeric', 
+		month: 'long', 
+		day: 'numeric' 
+	})
+	selectedDayTasks.value = [...todos]
+	dayTasksModalVisible.value = true
+}
+
+const closeDayTasksModal = () => {
+	dayTasksModalVisible.value = false
+	selectedDayTasks.value = []
+	selectedDayDate.value = ''
+}
+
 // Helper: delete todos that have been done for more than `autoDeleteMinutes`
 const deleteExpiredTodos = async () => {
 	const expiryDate = new Date()
@@ -118,7 +233,6 @@ const deleteExpiredTodos = async () => {
 
 	if (expiredTodos.length === 0) return
 
-	// Delete each expired todo
 	for (const todo of expiredTodos) {
 		try {
 			await deleteTodo(todo.id)
@@ -127,7 +241,6 @@ const deleteExpiredTodos = async () => {
 		}
 	}
 
-	// Refresh local list
 	rawTodos.value = rawTodos.value.filter(t => !expiredTodos.some(e => e.id === t.id))
 }
 
@@ -154,10 +267,8 @@ const loadData = async () => {
 // Toggle completion status
 const toggleComplete = async (todo) => {
 	const originalStatus = todo.status
-	// Optimistic update
 	todo.status = todo.status === 'open' ? 'done' : 'open'
 
-	// Set or remove completedAt timestamp
 	if (todo.status === 'done') {
 		todo.completedAt = new Date().toISOString()
 	} else {
@@ -172,11 +283,9 @@ const toggleComplete = async (todo) => {
 		if (index !== -1) {
 			rawTodos.value[index] = updated
 		}
-		// After successful toggle, check for expired todos
 		await deleteExpiredTodos()
 	} catch (err) {
 		console.error('Error toggling todo status:', err)
-		// Revert on error
 		todo.status = originalStatus
 		if (originalStatus === 'done') {
 			todo.completedAt = new Date().toISOString()
@@ -191,7 +300,6 @@ const toggleComplete = async (todo) => {
 // Toggle favorite
 const toggleFavorite = async (todo) => {
 	const originalFavorite = todo.favorite
-	// Optimistic update
 	todo.favorite = !todo.favorite
 	try {
 		const payload = { ...todo, categories: todo.categories }
@@ -283,7 +391,7 @@ const executeDelete = async () => {
 	}
 }
 
-// Format remaining time in largest unit + next unit
+// Format remaining time
 function formatTimeRemaining(ms) {
 	if (ms <= 0) return 'Expired'
 	const totalMinutes = Math.floor(ms / (1000 * 60))
@@ -317,7 +425,6 @@ function formatTimeRemaining(ms) {
 	return `${seconds} second${seconds !== 1 ? 's' : ''}`
 }
 
-// Enhanced countdown: returns formatted remaining time
 const getCountdownText = (todo) => {
 	if (todo.status !== 'done' || !todo.completedAt) return ''
 	const now = currentTime.value
@@ -328,12 +435,11 @@ const getCountdownText = (todo) => {
 	return formatTimeRemaining(diffMs)
 }
 
-// Event listener for todo creation
+// Event listeners
 const handleTodoCreated = () => {
 	loadData()
 }
 
-// Listen for changes to auto‑delete setting from other tabs or the same tab
 const handleAutoDeleteChange = (e) => {
 	autoDeleteMinutes.value = e.detail
 }
@@ -344,12 +450,10 @@ const handleStorage = (e) => {
 	}
 }
 
-// Watch for local changes to the setting (e.g. if another part of the app changes it)
 watch(autoDeleteMinutes, () => {
 	deleteExpiredTodos()
 })
 
-// Timer to update currentTime every second
 const startTimer = () => {
 	timer = setInterval(() => {
 		currentTime.value = new Date()
@@ -381,13 +485,36 @@ onBeforeUnmount(() => {
 				<h2 v-else>All Tasks</h2>
 			</div>
 			<div class="header-controls">
+				<div class="view-toggle">
+					<button 
+						:class="['view-btn', { active: viewMode === 'list' }]" 
+						@click="viewMode = 'list'"
+						title="List view"
+					>
+						<svg fill="#000000" height="200px" width="200px" version="1.1" xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512" xmlns:xlink="http://www.w3.org/1999/xlink" enable-background="new 0 0 512 512"><g id="SVGRepo_bgCarrier" stroke-width="0"></g><g id="SVGRepo_tracerCarrier" stroke-linecap="round" stroke-linejoin="round"></g><g id="SVGRepo_iconCarrier"> <g> <g>
+							<path d="m412.3,460h-312.6v-343h34.1l-8.2,35.2c-3.1,13.5 7.2,26.4 21.1,26.4h218.6c13.9,0 24.2-12.9 21.1-26.4l-8.2-35.2h34.1v343h-5.68434e-14zm-234-356.6h155.2l7.8,34.5h-170.8l7.8-34.5zm77.7-51.6c11.6,0 20.5,5 24.1,10.7h-48.3c3.7-5.7 12.6-10.7 24.2-10.7zm158.5,24.2h-46c-3.3-8-11.1-13.4-20.1-13.4h-25.8c-3.3-28.9-31.9-51.6-66.6-51.6-34.7,0-63.3,22.7-66.6,51.6h-25.8c-8.9,0-16.8,5.4-20.1,13.4h-46c-21.5,0-39,17.4-39,38.9v347.2c0,21.4 17.5,38.9 39,38.9h316.9c21.5,0 39-17.4 39-38.9v-347.2c0.1-21.4-17.4-38.9-38.9-38.9z"></path> <path d="m359.6,234.3h-207.2c-11.3,0-20.5,9.1-20.5,20.4 0,11.3 9.2,20.4 20.5,20.4h207.1c11.3,0 20.5-9.1 20.5-20.4 0.1-11.3-9.1-20.4-20.4-20.4z"></path> <path d="m359.6,353.5h-207.2c-11.3,0-20.5,9.1-20.5,20.4 0,11.3 9.2,20.4 20.5,20.4h207.1c11.3,0 20.5-9.1 20.5-20.4 0.1-11.3-9.1-20.4-20.4-20.4z"></path> </g> </g> </g>
+						</svg>
+						<span>List</span>
+					</button>
+					<button 
+						:class="['view-btn', { active: viewMode === 'calendar' }]" 
+						@click="viewMode = 'calendar'"
+						title="Calendar view"
+					>
+						<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+							<path d="M3 9H21M17 13.0014L7 13M10.3333 17.0005L7 17M7 3V5M17 3V5M6.2 21H17.8C18.9201 21 19.4802 21 19.908 20.782C20.2843 20.5903 20.5903 20.2843 20.782 19.908C21 19.4802 21 18.9201 21 17.8V8.2C21 7.07989 21 6.51984 20.782 6.09202C20.5903 5.71569 20.2843 5.40973 19.908 5.21799C19.4802 5 18.9201 5 17.8 5H6.2C5.0799 5 4.51984 5 4.09202 5.21799C3.71569 5.40973 3.40973 5.71569 3.21799 6.09202C3 6.51984 3 7.07989 3 8.2V17.8C3 18.9201 3 19.4802 3.21799 19.908C3.40973 20.2843 3.71569 20.5903 4.09202 20.782C4.51984 21 5.07989 21 6.2 21Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+						</svg>
+						<span>Calendar</span>
+					</button>
+				</div>
 				<input
+					v-if="viewMode === 'list'"
 					v-model="searchQuery"
 					type="text"
 					placeholder="Search tasks..."
 					class="search-input"
 				/>
-				<select v-model="sortBy" class="sort-select">
+				<select v-if="viewMode === 'list'" v-model="sortBy" class="sort-select">
 					<option value="default">Default (recent first)</option>
 					<option value="title-asc">Title A→Z</option>
 					<option value="title-desc">Title Z→A</option>
@@ -406,67 +533,179 @@ onBeforeUnmount(() => {
 		</div>
 
 		<div v-if="error" class="error-banner">{{ error }}</div>
-
 		<div v-if="isLoading" class="loading-state"><p>Loading todos...</p></div>
 
-		<div v-else-if="filteredTodos.length === 0" class="empty-state">
-			<p>No todos found for this category.</p>
-		</div>
-
-		<ul v-else class="todo-list">
-			<li v-for="todo in filteredTodos" :key="todo.id" class="todo-item">
-				<div class="todo-row todo-row-main">
-					<button
-						class="completion-circle"
-						:class="{ completed: todo.status === 'done' }"
-						@click="toggleComplete(todo)"
-					/>
-					<span class="todo-title">{{ todo.title }}</span>
-					<div class="todo-actions-right">
-						<button class="icon-btn star" :class="{ active: todo.favorite }" @click="toggleFavorite(todo)">
-							<svg width="24" height="24" viewBox="0 0 24 24" :fill="todo.favorite ? '#f5b342' : 'none'" stroke="currentColor" stroke-width="2">
-								<path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22 12 18.07 5.82 22 7 14.14 2 9.27l6.91-1.01L12 2z" />
-							</svg>
-						</button>
-						<button class="icon-btn edit" @click="openEdit(todo)">
-							<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="24" height="24">
-								<path d="M15.6287 5.12132L4.31497 16.435M15.6287 5.12132L19.1642 8.65685M15.6287 5.12132L17.0429 3.70711C17.4334 3.31658 18.0666 3.31658 18.4571 3.70711L20.5784 5.82843C20.969 6.21895 20.969 6.85212 20.5784 7.24264L19.1642 8.65685M7.85051 19.9706L4.31497 16.435M7.85051 19.9706L19.1642 8.65685M7.85051 19.9706L3.25431 21.0312L4.31497 16.435" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
-							</svg>
-						</button>
-						<button class="icon-btn delete" @click="confirmDelete(todo)">
-							<svg fill="#000000" viewBox="0 0 36 36" version="1.1" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
-								<title>trash-line</title>
-								<path class="clr-i-outline clr-i-outline-path-1" d="M27.14,34H8.86A2.93,2.93,0,0,1,6,31V11.23H8V31a.93.93,0,0,0,.86,1H27.14A.93.93,0,0,0,28,31V11.23h2V31A2.93,2.93,0,0,1,27.14,34Z"></path>
-								<path class="clr-i-outline clr-i-outline-path-2" d="M30.78,9H5A1,1,0,0,1,5,7H30.78a1,1,0,0,1,0,2Z"></path>
-								<rect class="clr-i-outline clr-i-outline-path-3" x="21" y="13" width="2" height="15"></rect>
-								<rect class="clr-i-outline clr-i-outline-path-4" x="13" y="13" width="2" height="15"></rect>
-								<path class="clr-i-outline clr-i-outline-path-5" d="M23,5.86H21.1V4H14.9V5.86H13V4a2,2,0,0,1,1.9-2h6.2A2,2,0,0,1,23,4Z"></path>
-								<rect x="0" y="0" width="36" height="36" fill-opacity="0"></rect>
-							</svg>
-						</button>
-					</div>
-				</div>
-				<div v-if="todo.description" class="todo-row todo-description">{{ todo.description }}</div>
-				<div class="todo-row todo-metadata">
-					<div class="meta-left">
-						<span v-if="todo.dueDate" class="meta-chip">
-							<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-								<path d="M3 9H21M17 13.0014L7 13M10.3333 17.0005L7 17M7 3V5M17 3V5M6.2 21H17.8C18.9201 21 19.4802 21 19.908 20.782C20.2843 20.5903 20.5903 20.2843 20.782 19.908C21 19.4802 21 18.9201 21 17.8V8.2C21 7.07989 21 6.51984 20.782 6.09202C20.5903 5.71569 20.2843 5.40973 19.908 5.21799C19.4802 5 18.9201 5 17.8 5H6.2C5.0799 5 4.51984 5 4.09202 5.21799C3.71569 5.40973 3.40973 5.71569 3.21799 6.09202C3 6.51984 3 7.07989 3 8.2V17.8C3 18.9201 3 19.4802 3.21799 19.908C3.40973 20.2843 3.71569 20.5903 4.09202 20.782C4.51984 21 5.07989 21 6.2 21Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
-							</svg>
-							{{ todo.dueDate }}
-							<span v-if="todo.dueTime" class="time-part">
-								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
-									<path d="M18.9997 20.5815L16.4179 18.0113M4.9997 20.5815L7.58154 18.0113M11.9997 9.58148V12.5815L13.4416 13.9998M6.74234 3.99735C6.36727 3.62228 5.85856 3.41156 5.32812 3.41156C4.79769 3.41156 4.28898 3.62228 3.91391 3.99735C3.53884 4.37242 3.32813 4.88113 3.32812 5.41156C3.32812 5.942 3.53884 6.4507 3.91391 6.82578M20.0858 6.82413C20.4609 6.44905 20.6716 5.94035 20.6716 5.40991C20.6716 4.87948 20.4609 4.37077 20.0858 3.9957C19.7107 3.62063 19.202 3.40991 18.6716 3.40991C18.1411 3.40991 17.6324 3.62063 17.2574 3.9957M18.9997 12.5815C18.9997 16.4475 15.8657 19.5815 11.9997 19.5815C8.1337 19.5815 4.9997 16.4475 4.9997 12.5815C4.9997 8.71549 8.1337 5.58149 11.9997 5.58149C15.8657 5.58149 18.9997 8.71549 18.9997 12.5815Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+		<!-- List View -->
+		<template v-if="viewMode === 'list'">
+			<div v-if="filteredTodos.length === 0" class="empty-state">
+				<p>No todos found for this category.</p>
+			</div>
+			<ul v-else class="todo-list">
+				<li v-for="todo in filteredTodos" :key="todo.id" class="todo-item">
+					<div class="todo-row todo-row-main">
+						<button
+							class="completion-circle"
+							:class="{ completed: todo.status === 'done' }"
+							@click="toggleComplete(todo)"
+						/>
+						<span class="todo-title">{{ todo.title }}</span>
+						<div class="todo-actions-right">
+							<button class="icon-btn star" :class="{ active: todo.favorite }" @click="toggleFavorite(todo)">
+								<svg width="24" height="24" viewBox="0 0 24 24" :fill="todo.favorite ? '#f5b342' : 'none'" stroke="currentColor" stroke-width="2">
+									<path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22 12 18.07 5.82 22 7 14.14 2 9.27l6.91-1.01L12 2z" />
 								</svg>
-								{{ todo.dueTime }}
-							</span>
-						</span>
-						<span v-for="cat in todo.categories" :key="cat" class="category-chip">{{ cat }}</span>
+							</button>
+							<button class="icon-btn edit" @click="openEdit(todo)">
+								<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="24" height="24">
+									<path d="M15.6287 5.12132L4.31497 16.435M15.6287 5.12132L19.1642 8.65685M15.6287 5.12132L17.0429 3.70711C17.4334 3.31658 18.0666 3.31658 18.4571 3.70711L20.5784 5.82843C20.969 6.21895 20.969 6.85212 20.5784 7.24264L19.1642 8.65685M7.85051 19.9706L4.31497 16.435M7.85051 19.9706L19.1642 8.65685M7.85051 19.9706L3.25431 21.0312L4.31497 16.435" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+								</svg>
+							</button>
+							<button class="icon-btn delete" @click="confirmDelete(todo)">
+								<svg fill="#000000" viewBox="0 0 36 36" version="1.1" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+									<title>trash-line</title>
+									<path class="clr-i-outline clr-i-outline-path-1" d="M27.14,34H8.86A2.93,2.93,0,0,1,6,31V11.23H8V31a.93.93,0,0,0,.86,1H27.14A.93.93,0,0,0,28,31V11.23h2V31A2.93,2.93,0,0,1,27.14,34Z"></path>
+									<path class="clr-i-outline clr-i-outline-path-2" d="M30.78,9H5A1,1,0,0,1,5,7H30.78a1,1,0,0,1,0,2Z"></path>
+									<rect class="clr-i-outline clr-i-outline-path-3" x="21" y="13" width="2" height="15"></rect>
+									<rect class="clr-i-outline clr-i-outline-path-4" x="13" y="13" width="2" height="15"></rect>
+									<path class="clr-i-outline clr-i-outline-path-5" d="M23,5.86H21.1V4H14.9V5.86H13V4a2,2,0,0,1,1.9-2h6.2A2,2,0,0,1,23,4Z"></path>
+									<rect x="0" y="0" width="36" height="36" fill-opacity="0"></rect>
+								</svg>
+							</button>
+						</div>
 					</div>
-					<div v-if="todo.status === 'done'" class="meta-right countdown">{{ getCountdownText(todo) }}</div>
+					<div v-if="todo.description" class="todo-row todo-description">{{ todo.description }}</div>
+					<div class="todo-row todo-metadata">
+						<div class="meta-left">
+							<span v-if="todo.dueDate" class="meta-chip">
+								<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+									<path d="M3 9H21M17 13.0014L7 13M10.3333 17.0005L7 17M7 3V5M17 3V5M6.2 21H17.8C18.9201 21 19.4802 21 19.908 20.782C20.2843 20.5903 20.5903 20.2843 20.782 19.908C21 19.4802 21 18.9201 21 17.8V8.2C21 7.07989 21 6.51984 20.782 6.09202C20.5903 5.71569 20.2843 5.40973 19.908 5.21799C19.4802 5 18.9201 5 17.8 5H6.2C5.0799 5 4.51984 5 4.09202 5.21799C3.71569 5.40973 3.40973 5.71569 3.21799 6.09202C3 6.51984 3 7.07989 3 8.2V17.8C3 18.9201 3 19.4802 3.21799 19.908C3.40973 20.2843 3.71569 20.5903 4.09202 20.782C4.51984 21 5.07989 21 6.2 21Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+								</svg>
+								{{ todo.dueDate }}
+								<span v-if="todo.dueTime" class="time-part">
+									<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+										<path d="M18.9997 20.5815L16.4179 18.0113M4.9997 20.5815L7.58154 18.0113M11.9997 9.58148V12.5815L13.4416 13.9998M6.74234 3.99735C6.36727 3.62228 5.85856 3.41156 5.32812 3.41156C4.79769 3.41156 4.28898 3.62228 3.91391 3.99735C3.53884 4.37242 3.32813 4.88113 3.32812 5.41156C3.32812 5.942 3.53884 6.4507 3.91391 6.82578M20.0858 6.82413C20.4609 6.44905 20.6716 5.94035 20.6716 5.40991C20.6716 4.87948 20.4609 4.37077 20.0858 3.9957C19.7107 3.62063 19.202 3.40991 18.6716 3.40991C18.1411 3.40991 17.6324 3.62063 17.2574 3.9957M18.9997 12.5815C18.9997 16.4475 15.8657 19.5815 11.9997 19.5815C8.1337 19.5815 4.9997 16.4475 4.9997 12.5815C4.9997 8.71549 8.1337 5.58149 11.9997 5.58149C15.8657 5.58149 18.9997 8.71549 18.9997 12.5815Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+									</svg>
+									{{ todo.dueTime }}
+								</span>
+							</span>
+							<span v-for="cat in todo.categories" :key="cat" class="category-chip">{{ cat }}</span>
+						</div>
+						<div v-if="todo.status === 'done'" class="meta-right countdown">{{ getCountdownText(todo) }}</div>
+					</div>
+				</li>
+			</ul>
+		</template>
+
+		<!-- Calendar View -->
+		<template v-if="viewMode === 'calendar'">
+			<div class="calendar-header">
+				<button class="calendar-nav-btn" @click="goToPreviousMonth">←</button>
+				<h3 class="calendar-month">{{ formatMonthYear(currentCalendarDate) }}</h3>
+				<button class="calendar-nav-btn" @click="goToNextMonth">→</button>
+				<button class="calendar-today-btn" @click="goToToday">Today</button>
+			</div>
+
+			<div class="calendar-grid">
+				<div class="calendar-weekday">Sun</div>
+				<div class="calendar-weekday">Mon</div>
+				<div class="calendar-weekday">Tue</div>
+				<div class="calendar-weekday">Wed</div>
+				<div class="calendar-weekday">Thu</div>
+				<div class="calendar-weekday">Fri</div>
+				<div class="calendar-weekday">Sat</div>
+
+				<div v-for="day in calendarDays" :key="day.date" 
+					:class="['calendar-day', { 'other-month': !day.isCurrentMonth, 'today': isToday(day.date) }]"
+					@click="openDayTasksModal(day.date, day.todos)">
+					<div class="calendar-day-number">{{ day.day }}</div>
+					<div class="calendar-day-tasks">
+						<div v-for="todo in day.todos.slice(0, 3)" :key="todo.id" 
+							:class="['calendar-task', { 'task-done': todo.status === 'done' }]"
+							@click.stop="openEdit(todo)">
+							{{ todo.title.length > 20 ? todo.title.slice(0, 20) + '...' : todo.title }}
+						</div>
+						<div v-if="day.todos.length > 3" class="calendar-more">
+							+{{ day.todos.length - 3 }} more
+						</div>
+					</div>
 				</div>
-			</li>
-		</ul>
+			</div>
+
+			<div v-if="categoryFilteredTodos.filter(t => t.dueDate).length === 0" class="empty-state">
+				<p>No tasks with due dates found for this category.</p>
+			</div>
+		</template>
+
+		<!-- Day Tasks Modal -->
+		<Teleport to="body">
+			<div v-if="dayTasksModalVisible" class="modal-overlay" @click.self="closeDayTasksModal">
+				<div class="modal-card day-tasks-modal">
+					<div class="modal-header">
+						<h3>Tasks for {{ selectedDayDate }}</h3>
+						<button class="close-btn" @click="closeDayTasksModal">✕</button>
+					</div>
+					<div class="modal-body">
+						<div v-if="selectedDayTasks.length === 0" class="empty-state">
+							No tasks for this day.
+						</div>
+						<ul v-else class="todo-list day-tasks-list">
+							<li v-for="todo in selectedDayTasks" :key="todo.id" class="todo-item">
+								<div class="todo-row todo-row-main">
+									<button
+										class="completion-circle"
+										:class="{ completed: todo.status === 'done' }"
+										@click="toggleComplete(todo)"
+									/>
+									<span class="todo-title">{{ todo.title }}</span>
+									<div class="todo-actions-right">
+										<button class="icon-btn star" :class="{ active: todo.favorite }" @click="toggleFavorite(todo)">
+											<svg width="24" height="24" viewBox="0 0 24 24" :fill="todo.favorite ? '#f5b342' : 'none'" stroke="currentColor" stroke-width="2">
+												<path d="M12 2l3.09 6.26L22 9.27l-5 4.87L18.18 22 12 18.07 5.82 22 7 14.14 2 9.27l6.91-1.01L12 2z" />
+											</svg>
+										</button>
+										<button class="icon-btn edit" @click="openEdit(todo)">
+											<svg viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg" width="24" height="24">
+												<path d="M15.6287 5.12132L4.31497 16.435M15.6287 5.12132L19.1642 8.65685M15.6287 5.12132L17.0429 3.70711C17.4334 3.31658 18.0666 3.31658 18.4571 3.70711L20.5784 5.82843C20.969 6.21895 20.969 6.85212 20.5784 7.24264L19.1642 8.65685M7.85051 19.9706L4.31497 16.435M7.85051 19.9706L19.1642 8.65685M7.85051 19.9706L3.25431 21.0312L4.31497 16.435" stroke="currentColor" stroke-linecap="round" stroke-linejoin="round"/>
+											</svg>
+										</button>
+										<button class="icon-btn delete" @click="confirmDelete(todo)">
+											<svg fill="#000000" viewBox="0 0 36 36" version="1.1" preserveAspectRatio="xMidYMid meet" xmlns="http://www.w3.org/2000/svg" xmlns:xlink="http://www.w3.org/1999/xlink">
+												<title>trash-line</title>
+												<path class="clr-i-outline clr-i-outline-path-1" d="M27.14,34H8.86A2.93,2.93,0,0,1,6,31V11.23H8V31a.93.93,0,0,0,.86,1H27.14A.93.93,0,0,0,28,31V11.23h2V31A2.93,2.93,0,0,1,27.14,34Z"></path>
+												<path class="clr-i-outline clr-i-outline-path-2" d="M30.78,9H5A1,1,0,0,1,5,7H30.78a1,1,0,0,1,0,2Z"></path>
+												<rect class="clr-i-outline clr-i-outline-path-3" x="21" y="13" width="2" height="15"></rect>
+												<rect class="clr-i-outline clr-i-outline-path-4" x="13" y="13" width="2" height="15"></rect>
+												<path class="clr-i-outline clr-i-outline-path-5" d="M23,5.86H21.1V4H14.9V5.86H13V4a2,2,0,0,1,1.9-2h6.2A2,2,0,0,1,23,4Z"></path>
+												<rect x="0" y="0" width="36" height="36" fill-opacity="0"></rect>
+											</svg>
+										</button>
+									</div>
+								</div>
+								<div v-if="todo.description" class="todo-row todo-description">{{ todo.description }}</div>
+								<div class="todo-row todo-metadata">
+									<div class="meta-left">
+										<span v-if="todo.dueDate" class="meta-chip">
+											<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+												<path d="M3 9H21M17 13.0014L7 13M10.3333 17.0005L7 17M7 3V5M17 3V5M6.2 21H17.8C18.9201 21 19.4802 21 19.908 20.782C20.2843 20.5903 20.5903 20.2843 20.782 19.908C21 19.4802 21 18.9201 21 17.8V8.2C21 7.07989 21 6.51984 20.782 6.09202C20.5903 5.71569 20.2843 5.40973 19.908 5.21799C19.4802 5 18.9201 5 17.8 5H6.2C5.0799 5 4.51984 5 4.09202 5.21799C3.71569 5.40973 3.40973 5.71569 3.21799 6.09202C3 6.51984 3 7.07989 3 8.2V17.8C3 18.9201 3 19.4802 3.21799 19.908C3.40973 20.2843 3.71569 20.5903 4.09202 20.782C4.51984 21 5.07989 21 6.2 21Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+											</svg>
+											{{ todo.dueDate }}
+											<span v-if="todo.dueTime" class="time-part">
+												<svg width="16" height="16" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg">
+													<path d="M18.9997 20.5815L16.4179 18.0113M4.9997 20.5815L7.58154 18.0113M11.9997 9.58148V12.5815L13.4416 13.9998M6.74234 3.99735C6.36727 3.62228 5.85856 3.41156 5.32812 3.41156C4.79769 3.41156 4.28898 3.62228 3.91391 3.99735C3.53884 4.37242 3.32813 4.88113 3.32812 5.41156C3.32812 5.942 3.53884 6.4507 3.91391 6.82578M20.0858 6.82413C20.4609 6.44905 20.6716 5.94035 20.6716 5.40991C20.6716 4.87948 20.4609 4.37077 20.0858 3.9957C19.7107 3.62063 19.202 3.40991 18.6716 3.40991C18.1411 3.40991 17.6324 3.62063 17.2574 3.9957M18.9997 12.5815C18.9997 16.4475 15.8657 19.5815 11.9997 19.5815C8.1337 19.5815 4.9997 16.4475 4.9997 12.5815C4.9997 8.71549 8.1337 5.58149 11.9997 5.58149C15.8657 5.58149 18.9997 8.71549 18.9997 12.5815Z" stroke="currentColor" stroke-width="2" stroke-linecap="round" stroke-linejoin="round"/>
+												</svg>
+												{{ todo.dueTime }}
+											</span>
+										</span>
+										<span v-for="cat in todo.categories" :key="cat" class="category-chip">{{ cat }}</span>
+									</div>
+									<div v-if="todo.status === 'done'" class="meta-right countdown">{{ getCountdownText(todo) }}</div>
+								</div>
+							</li>
+						</ul>
+					</div>
+				</div>
+			</div>
+		</Teleport>
 
 		<!-- Edit Modal -->
 		<Teleport to="body">
@@ -554,10 +793,414 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-/* Keep all existing styles – unchanged */
+/* Keep all existing styles from your current file */
 .todo-list-view {
 	background: var(--surface);
 	backdrop-filter: blur(12px);
+}
+
+.todo-list {
+	list-style: none;
+	padding: 0;
+	margin: 0;
+	display: grid;
+	gap: 16px;
+}
+
+.todo-item {
+	padding: 18px 20px;
+	border-radius: 24px;
+	background: var(--surface-muted);
+	border: 1px solid var(--border);
+	display: flex;
+	flex-direction: column;
+	gap: 10px;
+}
+
+.todo-row {
+	display: flex;
+	align-items: center;
+}
+
+.todo-row-main {
+	display: flex;
+	align-items: center;
+	justify-content: space-between;
+}
+
+.completion-circle {
+	width: 28px;
+	height: 28px;
+	border-radius: 50%;
+	border: 2px solid var(--text-muted);
+	background: transparent;
+	cursor: pointer;
+	padding: 0;
+	transition: background 0.2s, border-color 0.2s;
+	margin-right: 12px;
+	flex-shrink: 0;
+}
+
+.completion-circle.completed {
+	background: #4caf50;
+	border-color: #4caf50;
+}
+
+.todo-title {
+	flex: 1;
+	font-weight: 600;
+	font-size: 1.15rem;
+}
+
+.todo-actions-right {
+	display: flex;
+	gap: 8px;
+	margin-left: 12px;
+	flex-shrink: 0;
+}
+
+.icon-btn {
+	background: transparent;
+	border: none;
+	cursor: pointer;
+	padding: 0;
+	line-height: 1;
+	display: inline-flex;
+	align-items: center;
+	justify-content: center;
+	opacity: 0.6;
+	transition: opacity 0.2s, transform 0.1s;
+}
+
+.icon-btn:hover {
+	opacity: 1;
+	transform: scale(1.05);
+}
+
+.icon-btn:active {
+	transform: scale(0.95);
+}
+
+.icon-btn.star svg,
+.icon-btn.edit svg,
+.icon-btn.delete svg {
+	width: 24px;
+	height: 24px;
+	stroke: currentColor;
+}
+
+.icon-btn.delete svg {
+	width: 28px;
+	height: 28px;
+	fill: currentColor;
+	stroke: none;
+}
+
+.icon-btn.star.active svg {
+	fill: #f5b342;
+}
+
+.todo-description {
+	color: var(--text-muted);
+	padding-left: 40px;
+	font-size: 0.95rem;
+}
+
+.todo-metadata {
+	display: flex;
+	justify-content: space-between;
+	align-items: center;
+	flex-wrap: wrap;
+	gap: 12px;
+	padding-left: 40px;
+}
+
+.meta-left {
+	display: flex;
+	flex-wrap: wrap;
+	gap: 8px;
+	align-items: center;
+}
+
+.meta-chip,
+.category-chip {
+	display: inline-flex;
+	align-items: center;
+	gap: 6px;
+	background: var(--chip);
+	border: 1px solid var(--border);
+	padding: 6px 14px;
+	font-size: 0.9rem;
+	border-radius: 999px;
+}
+
+.meta-chip svg,
+.category-chip svg {
+	width: 16px;
+	height: 16px;
+	stroke: currentColor;
+}
+
+.time-part {
+	display: inline-flex;
+	align-items: center;
+	gap: 4px;
+	margin-left: 4px;
+}
+
+.meta-right {
+	font-size: 0.9rem;
+	color: #d32f2f;
+	font-weight: 500;
+	white-space: nowrap;
+}
+
+.countdown {
+	background: rgba(211, 47, 47, 0.1);
+	padding: 4px 14px;
+	border-radius: 999px;
+}
+
+.empty-state {
+	padding: 40px 20px;
+	text-align: center;
+	color: var(--text-muted);
+	background: var(--surface-muted);
+	border-radius: 18px;
+}
+
+.loading-state {
+	padding: 40px 20px;
+	text-align: center;
+	color: var(--text-muted);
+}
+
+.error-banner {
+	background: #fee;
+	border: 1px solid #fcc;
+	color: #c33;
+	padding: 12px;
+	border-radius: 12px;
+	margin-bottom: 16px;
+	text-align: center;
+}
+
+.refresh-btn {
+	background: transparent;
+	border: none;
+	cursor: pointer;
+	padding: 8px;
+	border-radius: 50%;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	transition: background 0.2s;
+}
+
+.refresh-btn:hover {
+	background: rgba(0, 0, 0, 0.05);
+}
+
+/* Calendar styles */
+.view-toggle {
+	display: flex;
+	gap: 4px;
+	background: var(--surface-muted);
+	padding: 2px;
+	border-radius: 999px;
+}
+
+.view-btn {
+	display: flex;
+	align-items: center;
+	gap: 6px;
+	padding: 6px 12px;
+	border: none;
+	border-radius: 999px;
+	cursor: pointer;
+	background: transparent;
+	color: var(--text-secondary);
+	font-size: 0.9rem;
+	transition: all 0.2s;
+}
+
+.view-btn svg {
+	width: 18px;
+	height: 18px;
+}
+
+.view-btn.active {
+	background: var(--accent);
+	color: white;
+}
+
+.view-btn:hover:not(.active) {
+	background: var(--surface);
+}
+
+.calendar-header {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	margin-bottom: 20px;
+	justify-content: center;
+}
+
+.calendar-nav-btn {
+	background: var(--surface-muted);
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	padding: 6px 12px;
+	cursor: pointer;
+	font-size: 1.2rem;
+	color: var(--text-primary);
+}
+
+.calendar-nav-btn:hover {
+	background: var(--accent-soft);
+}
+
+.calendar-today-btn {
+	background: var(--accent);
+	color: white;
+	border: none;
+	border-radius: 8px;
+	padding: 6px 12px;
+	cursor: pointer;
+	margin-left: auto;
+}
+
+.calendar-month {
+	margin: 0;
+	font-size: 1.2rem;
+	color: var(--text-primary);
+}
+
+.calendar-grid {
+	display: grid;
+	grid-template-columns: repeat(7, 1fr);
+	gap: 8px;
+	margin-bottom: 20px;
+}
+
+.calendar-weekday {
+	text-align: center;
+	font-weight: 600;
+	padding: 8px;
+	color: var(--text-secondary);
+	font-size: 0.9rem;
+}
+
+.calendar-day {
+	min-height: 100px;
+	border: 1px solid var(--border);
+	border-radius: 8px;
+	padding: 8px;
+	background: var(--surface-muted);
+	position: relative;
+	cursor: pointer;
+	transition: background 0.2s;
+}
+
+.calendar-day:hover {
+	background: var(--surface);
+}
+
+.calendar-day.other-month {
+	opacity: 0.5;
+	background: var(--surface);
+}
+
+.calendar-day.today {
+	border: 2px solid var(--accent);
+	background: var(--surface);
+}
+
+.calendar-day-number {
+	font-weight: 500;
+	margin-bottom: 8px;
+	color: var(--text-primary);
+}
+
+.calendar-day-tasks {
+	display: flex;
+	flex-direction: column;
+	gap: 4px;
+}
+
+.calendar-task {
+	font-size: 0.75rem;
+	padding: 4px 6px;
+	background: var(--accent-soft);
+	border-radius: 4px;
+	cursor: pointer;
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+	color: var(--text-primary);
+	transition: transform 0.1s;
+}
+
+.calendar-task:hover {
+	transform: scale(1.02);
+	background: var(--accent);
+	color: white;
+}
+
+.calendar-task.task-done {
+	opacity: 0.6;
+}
+
+.calendar-more {
+	font-size: 0.7rem;
+	color: var(--text-muted);
+	padding: 2px 4px;
+	text-align: center;
+	cursor: pointer;
+}
+
+.calendar-more:hover {
+	color: var(--accent);
+}
+
+.day-tasks-modal {
+	max-width: 800px;
+	width: 90%;
+}
+
+.day-tasks-list {
+	display: flex;
+	flex-direction: column;
+	gap: 16px;
+	max-height: 70vh;
+	overflow-y: auto;
+	padding: 0;
+}
+
+@media (max-width: 768px) {
+	.calendar-day {
+		min-height: 80px;
+	}
+	
+	.calendar-task {
+		font-size: 0.7rem;
+		padding: 2px 4px;
+	}
+	
+	.view-btn {
+		padding: 4px 8px;
+		font-size: 0.8rem;
+	}
+	
+	.view-btn svg {
+		width: 14px;
+		height: 14px;
+	}
+	
+	.day-tasks-modal {
+		width: 95%;
+		max-width: 95%;
+	}
 }
 
 .todo-list {

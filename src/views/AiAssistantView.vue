@@ -770,42 +770,239 @@ onBeforeUnmount(() => {
 </template>
 
 <style scoped>
-.assistant-page { display: flex; flex-direction: column; gap: 16px; }
-.assistant-head { display: flex; justify-content: space-between; align-items: center; flex-wrap: wrap; }
-.assistant-head h1 { margin: 0 0 6px; }
-.assistant-head p { margin: 0; color: var(--text-muted); width: 100%; }
-.header-actions { display: flex; gap: 12px; }
-.clear-history-btn { background: var(--chip); border: none; border-radius: 999px; padding: 6px 12px; cursor: pointer; font-size: 0.85rem; color: var(--text); }
-.panel { border: 1px solid var(--border); background: var(--surface); padding: 16px; }
-.panel h2 { margin-top: 0; font-size: 18px; }
-.row { display: flex; flex-direction: column; gap: 6px; margin-bottom: 12px; }
-input, select, button { border: 1px solid var(--input-border); background: var(--input-bg); color: var(--text); padding: 9px 10px; font-size: 14px; }
-button { cursor: pointer; }
-.actions { display: flex; gap: 8px; flex-wrap: wrap; }
-.danger { border-color: #b54a4a; color: #b54a4a; }
-.check { display: flex; align-items: center; gap: 8px; margin-bottom: 12px; }
-.status { margin: 0; color: var(--text-muted); }
-.chat .hint { color: var(--text-muted); margin-top: 0; }
-.config-summary { margin: 0 0 12px; color: var(--text-muted); }
-.config-gap { margin-left: 12px; }
-.messages { max-height: 260px; overflow: auto; border: 1px solid var(--border); padding: 10px; background: var(--surface-muted); margin-bottom: 10px; }
-.message { margin-bottom: 10px; }
-.message pre { margin: 4px 0 0; white-space: pre-wrap; font-family: inherit; }
-.chat-row { display: grid; grid-template-columns: 1fr auto; gap: 8px; margin-bottom: 12px; }
-.loading { text-align: center; color: var(--text-muted); font-style: italic; margin-top: 8px; }
+.assistant-page {
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
 
-.modal-overlay { position: fixed; top: 0; left: 0; width: 100%; height: 100%; background: rgba(0,0,0,0.5); display: flex; align-items: center; justify-content: center; z-index: 1000; }
-.modal-card { background: var(--modal-bg); color: var(--text); border-radius: 28px; padding: 24px; width: 90%; max-width: 500px; max-height: 90vh; overflow-y: auto; box-shadow: 0 20px 40px rgba(0,0,0,0.2); }
-.small-modal { max-width: 400px; }
-.batch-modal { max-width: 600px; }
-.modal-header { display: flex; justify-content: space-between; align-items: center; margin-bottom: 20px; }
-.modal-header h3 { margin: 0; color: var(--text-strong); }
-.close-btn { background: transparent; border: none; font-size: 1.5rem; cursor: pointer; padding: 0; line-height: 1; color: var(--text); }
-.modal-body pre { white-space: pre-wrap; margin: 0; }
-.modal-footer { display: flex; justify-content: flex-end; gap: 12px; margin-top: 24px; }
-.secondary-button, .danger-button, .primary-button { border: none; border-radius: 999px; padding: 10px 20px; cursor: pointer; font-weight: 500; }
-.primary-button { background: var(--accent); color: var(--accent-text); }
-.secondary-button { background: var(--chip); color: var(--text); }
-.danger-button { background: #d32f2f; color: white; }
-.danger-button:hover { background: #b71c1c; }
+.assistant-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+}
+
+.assistant-head h1 {
+  margin: 0 0 6px;
+}
+
+.assistant-head p {
+  margin: 0;
+  color: var(--text-muted);
+  width: 100%;
+}
+
+.header-actions {
+  display: flex;
+  gap: 12px;
+}
+
+.clear-history-btn {
+  background: var(--chip);
+  border: none;
+  border-radius: 999px;
+  padding: 6px 12px;
+  cursor: pointer;
+  font-size: 0.85rem;
+  color: var(--text);
+}
+
+.panel {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  padding: 16px;
+}
+
+.panel h2 {
+  margin-top: 0;
+  font-size: 18px;
+}
+
+.row {
+  display: flex;
+  flex-direction: column;
+  gap: 6px;
+  margin-bottom: 12px;
+}
+
+input,
+select,
+button {
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--text);
+  padding: 9px 10px;
+  font-size: 14px;
+}
+
+button {
+  cursor: pointer;
+}
+
+.actions {
+  display: flex;
+  gap: 8px;
+  flex-wrap: wrap;
+}
+
+.danger {
+  border-color: #b54a4a;
+  color: #b54a4a;
+}
+
+.check {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.status {
+  margin: 0;
+  color: var(--text-muted);
+}
+
+.chat .hint {
+  color: var(--text-muted);
+  margin-top: 0;
+}
+
+.config-summary {
+  margin: 0 0 12px;
+  color: var(--text-muted);
+}
+
+.config-gap {
+  margin-left: 12px;
+}
+
+.messages {
+  max-height: 260px;
+  overflow: auto;
+  border: 1px solid var(--border);
+  padding: 10px;
+  background: var(--surface-muted);
+  margin-bottom: 10px;
+}
+
+.message {
+  margin-bottom: 10px;
+}
+
+.message pre {
+  margin: 4px 0 0;
+  white-space: pre-wrap;
+  font-family: inherit;
+}
+
+.chat-row {
+  display: grid;
+  grid-template-columns: 1fr auto;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+
+.loading {
+  text-align: center;
+  color: var(--text-muted);
+  font-style: italic;
+  margin-top: 8px;
+}
+
+.modal-overlay {
+  position: fixed;
+  top: 0;
+  left: 0;
+  width: 100%;
+  height: 100%;
+  background: rgba(0, 0, 0, 0.5);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 1000;
+}
+
+.modal-card {
+  background: var(--modal-bg);
+  color: var(--text);
+  border-radius: 28px;
+  padding: 24px;
+  width: 90%;
+  max-width: 500px;
+  max-height: 90vh;
+  overflow-y: auto;
+  box-shadow: 0 20px 40px rgba(0, 0, 0, 0.2);
+}
+
+.small-modal {
+  max-width: 400px;
+}
+
+.batch-modal {
+  max-width: 600px;
+}
+
+.modal-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 20px;
+}
+
+.modal-header h3 {
+  margin: 0;
+  color: var(--text-strong);
+}
+
+.close-btn {
+  background: transparent;
+  border: none;
+  font-size: 1.5rem;
+  cursor: pointer;
+  padding: 0;
+  line-height: 1;
+  color: var(--text);
+}
+
+.modal-body pre {
+  white-space: pre-wrap;
+  margin: 0;
+}
+
+.modal-footer {
+  display: flex;
+  justify-content: flex-end;
+  gap: 12px;
+  margin-top: 24px;
+}
+
+.secondary-button,
+.danger-button,
+.primary-button {
+  border: none;
+  border-radius: 999px;
+  padding: 10px 20px;
+  cursor: pointer;
+  font-weight: 500;
+}
+
+.primary-button {
+  background: var(--accent);
+  color: var(--accent-text);
+}
+
+.secondary-button {
+  background: var(--chip);
+  color: var(--text);
+}
+
+.danger-button {
+  background: #d32f2f;
+  color: white;
+}
+
+.danger-button:hover {
+  background: #b71c1c;
+}
 </style>
