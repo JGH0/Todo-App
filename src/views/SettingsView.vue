@@ -10,6 +10,8 @@ import {
 } from '@/utils/aiSettings'
 import { getAutoDeleteMinutes, setAutoDeleteMinutes, AUTO_DELETE_MINUTES_KEY } from '@/utils/appSettings'
 import { themes, loadTheme, applyTheme } from '@/utils/themeSettings'
+import { getTodos } from '@/services/todoService'
+import { getCategories } from '@/services/categoryService'
 
 // ── Theme ──────────────────────────────────────────────────────────────────
 const currentTheme = ref(loadTheme())
@@ -258,6 +260,57 @@ watch(
     }
   },
 )
+
+// ── Export ─────────────────────────────────────────────────────────────────
+const exportLoading = ref(false)
+const exportStatus = ref('')
+
+function downloadFile(content, filename, mimeType) {
+  const blob = new Blob([content], { type: mimeType })
+  const url = URL.createObjectURL(blob)
+  const a = document.createElement('a')
+  a.href = url
+  a.download = filename
+  a.click()
+  URL.revokeObjectURL(url)
+}
+
+async function exportAsJson() {
+  exportLoading.value = true
+  exportStatus.value = ''
+  try {
+    const [todos, categories] = await Promise.all([getTodos(), getCategories()])
+    const payload = { exportedAt: new Date().toISOString(), todos, categories }
+    downloadFile(JSON.stringify(payload, null, 2), 'todos-export.json', 'application/json')
+    exportStatus.value = `Exported ${todos.length} todo(s).`
+  } catch (e) {
+    exportStatus.value = `Export failed: ${e.message}`
+  } finally {
+    exportLoading.value = false
+  }
+}
+
+async function exportAsCsv() {
+  exportLoading.value = true
+  exportStatus.value = ''
+  try {
+    const [todos, categories] = await Promise.all([getTodos(), getCategories()])
+    const catMap = Object.fromEntries(categories.map((c) => [c.id, c.name]))
+    const headers = ['id', 'title', 'description', 'status', 'dueDate', 'dueTime', 'category', 'createdAt']
+    const escape = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
+    const rows = todos.map((t) =>
+      [t.id, t.title, t.description, t.status, t.dueDate, t.dueTime, catMap[t.categoryId] ?? '', t.createdAt]
+        .map(escape)
+        .join(','),
+    )
+    downloadFile([headers.join(','), ...rows].join('\n'), 'todos-export.csv', 'text/csv')
+    exportStatus.value = `Exported ${todos.length} todo(s).`
+  } catch (e) {
+    exportStatus.value = `Export failed: ${e.message}`
+  } finally {
+    exportLoading.value = false
+  }
+}
 </script>
 
 <template>
@@ -428,6 +481,16 @@ watch(
             </button>
           </div>
         </div>
+      </article>
+
+      <article class="panel">
+        <h2>Export</h2>
+        <p class="hint">Download all your todos and categories as a file.</p>
+        <div class="actions">
+          <button :disabled="exportLoading" @click="exportAsJson">Export as JSON</button>
+          <button :disabled="exportLoading" @click="exportAsCsv">Export as CSV</button>
+        </div>
+        <p v-if="exportStatus" class="status">{{ exportStatus }}</p>
       </article>
 
       <article class="panel">
