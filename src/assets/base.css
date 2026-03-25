@@ -1,50 +1,50 @@
-/* color palette from <https://github.com/vuejs/theme> */
+/* Theme CSS variables – defaults match the "light" theme.
+   These are overridden at runtime by applyTheme() in themeSettings.js */
 :root {
   font-family: "Avenir Next", "Segoe UI", sans-serif;
-  color: #1a1a1a;
-  background:
-    radial-gradient(circle at top left, rgba(255, 255, 255, 0.8), transparent 24%),
-    linear-gradient(180deg, #f4f4f2 0%, #ebebe8 100%);
   line-height: 1.5;
   font-weight: 400;
-  --surface: rgba(255, 255, 255, 0.7);
+
+  /* app shell */
+  --bg: #f5f5f5;
+
+  /* surfaces */
+  --surface: #ffffff;
   --surface-strong: #ffffff;
-  --border: #cfcfcb;
+  --surface-muted: #fafafa;
+
+  /* borders & dividers */
+  --border: #d0d0d0;
   --line: #b9b9b5;
-  --accent: #274f69;
-  --accent-soft: #d6e4ec;
+
+  /* text */
+  --text: #1f1f1f;
   --text-muted: #686866;
+  --text-strong: #111111;
+
+  /* accent */
+  --accent: #274f69;
+  --accent-text: #ffffff;
+  --accent-soft: #d6e4ec;
+
+  /* sidebar (can differ from surface in some themes) */
+  --sidebar-bg: #ffffff;
+  --sidebar-border: #d0d0d0;
+  --sidebar-text: #222222;
+  --sidebar-text-muted: #686866;
+
+  /* inputs */
+  --input-bg: #ffffff;
+  --input-border: #cfcfcf;
+
+  /* modal */
+  --modal-bg: #ffffff;
+
+  /* chips / tags */
   --chip: #d8d8d8;
+
+  /* status */
   --success: #dff7e7;
-}
-
-/* semantic color variables for this project */
-:root {
-  --color-background: var(--vt-c-white);
-  --color-background-soft: var(--vt-c-white-soft);
-  --color-background-mute: var(--vt-c-white-mute);
-
-  --color-border: var(--vt-c-divider-light-2);
-  --color-border-hover: var(--vt-c-divider-light-1);
-
-  --color-heading: var(--vt-c-text-light-1);
-  --color-text: var(--vt-c-text-light-1);
-
-  --section-gap: 160px;
-}
-
-@media (prefers-color-scheme: dark) {
-  :root {
-    --color-background: var(--vt-c-black);
-    --color-background-soft: var(--vt-c-black-soft);
-    --color-background-mute: var(--vt-c-black-mute);
-
-    --color-border: var(--vt-c-divider-dark-2);
-    --color-border-hover: var(--vt-c-divider-dark-1);
-
-    --color-heading: var(--vt-c-text-dark-1);
-    --color-text: var(--vt-c-text-dark-2);
-  }
 }
 
 *,
@@ -57,11 +57,11 @@
 
 body {
   min-height: 100vh;
-  color: var(--color-text);
-  background: var(--color-background);
+  color: var(--text);
+  background: var(--bg);
   transition:
-    color 0.5s,
-    background-color 0.5s;
+    color 0.3s,
+    background-color 0.3s;
   line-height: 1.6;
   font-family:
     Inter,

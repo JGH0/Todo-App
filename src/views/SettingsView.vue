@@ -9,6 +9,19 @@ import {
   saveAiSettings,
 } from '@/utils/aiSettings'
 import { getAutoDeleteMinutes, setAutoDeleteMinutes, AUTO_DELETE_MINUTES_KEY } from '@/utils/appSettings'
+import { themes, loadTheme, applyTheme } from '@/utils/themeSettings'
+
+// ── Theme ──────────────────────────────────────────────────────────────────
+const currentTheme = ref(loadTheme())
+const themeGroups = ['Light', 'Dark', 'Colorful']
+const themesByGroup = computed(() =>
+  Object.fromEntries(themeGroups.map((g) => [g, themes.filter((t) => t.group === g)]))
+)
+
+function selectTheme(id) {
+  currentTheme.value = id
+  applyTheme(id)
+}
 
 const form = ref(loadAiSettings())
 const modelsLoading = ref(false)
@@ -392,6 +405,32 @@ watch(
       </article>
 
       <article class="panel">
+        <h2>Appearance</h2>
+        <p class="hint">Choose a theme. It is saved automatically in this browser.</p>
+
+        <div v-for="group in themeGroups" :key="group" class="theme-group">
+          <h3 class="group-label">{{ group }}</h3>
+          <div class="theme-grid">
+            <button
+              v-for="theme in themesByGroup[group]"
+              :key="theme.id"
+              class="theme-swatch"
+              :class="{ active: currentTheme === theme.id }"
+              :title="theme.name"
+              @click="selectTheme(theme.id)"
+            >
+              <span class="swatch-colors">
+                <span class="swatch-dot" :style="{ background: theme.preview[0] }" />
+                <span class="swatch-dot" :style="{ background: theme.preview[1] }" />
+                <span class="swatch-dot" :style="{ background: theme.preview[2] }" />
+              </span>
+              <span class="swatch-label">{{ theme.name }}</span>
+            </button>
+          </div>
+        </div>
+      </article>
+
+      <article class="panel">
         <h2>Auto‑Deletion</h2>
         <div class="row">
           <label>Delete completed todos after</label>
@@ -432,7 +471,7 @@ watch(
 
 .page-head p {
   margin: 0;
-  color: #555;
+  color: var(--text-muted);
 }
 
 .settings-grid {
@@ -442,8 +481,8 @@ watch(
 }
 
 .panel {
-  background: #fff;
-  border: 1px solid #d9d9d9;
+  background: var(--surface);
+  border: 1px solid var(--border);
   padding: 16px;
 }
 
@@ -476,22 +515,23 @@ watch(
 }
 
 .server-block {
-  border: 1px solid #d9d9d9;
+  border: 1px solid var(--border);
   padding: 14px;
   margin-bottom: 12px;
-  background: #fafafa;
+  background: var(--surface-muted);
 }
 
 .server-block.active {
-  border-color: #111;
-  background: #fff;
+  border-color: var(--text-strong);
+  background: var(--surface);
 }
 
 input,
 select,
 button {
-  border: 1px solid #cfcfcf;
-  background: #fff;
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--text);
   padding: 9px 10px;
   font-size: 14px;
 }
@@ -517,7 +557,7 @@ select:disabled {
 .status,
 .active-line {
   margin: 0;
-  color: #555;
+  color: var(--text-muted);
 }
 
 .hint {
@@ -539,6 +579,74 @@ code {
 }
 .unit-select {
   flex: 1;
+}
+
+/* ── Appearance / theme swatches ── */
+.appearance-panel {
+  grid-column: 1 / -1;
+}
+
+.theme-group {
+  margin-bottom: 16px;
+}
+
+.group-label {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin: 0 0 10px;
+}
+
+.theme-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.theme-swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: border-color 0.2s, transform 0.1s;
+  min-width: 72px;
+}
+
+.theme-swatch:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.theme-swatch.active {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.swatch-colors {
+  display: flex;
+  gap: 3px;
+}
+
+.swatch-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  display: block;
+}
+
+.swatch-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
 }
 
 @media (max-width: 960px) {

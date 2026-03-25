@@ -515,8 +515,8 @@ a {
 }
 
 .badge {
-  background: #ececec;
-  color: #303030;
+  background: var(--chip);
+  color: var(--text);
 }
 
 .status-pill[data-status='open'] {
@@ -537,7 +537,7 @@ a {
 
 .todo-form {
   gap: 24px;
-  background: #f2f2ef;
+  background: var(--surface-muted);
   min-height: calc(100vh - 48px);
   border-radius: 0;
   border: 1px solid rgba(26, 26, 26, 0.12);
@@ -596,7 +596,7 @@ a {
   border-radius: 0;
   padding: 12px 4px;
   background: transparent;
-  color: #1a1a1a;
+  color: var(--text);
 }
 
 .field input:focus,
@@ -644,7 +644,7 @@ a {
 .icon-button {
   width: 56px;
   height: 56px;
-  border: 3px solid #111;
+  border: 3px solid var(--text-strong);
   border-radius: 999px;
   display: grid;
   place-items: center;
@@ -666,7 +666,8 @@ a {
 .inline-icon-button {
   padding: 10px 12px;
   border-radius: 14px;
-  background: #e3e3e1;
+  background: var(--chip);
+  color: var(--text);
   white-space: nowrap;
 }
 
@@ -772,8 +773,8 @@ a {
 }
 
 .primary-button {
-  background: linear-gradient(135deg, #274f69, #3a708e);
-  color: #fff;
+  background: var(--accent);
+  color: var(--accent-text);
 }
 
 .primary-button:disabled {
@@ -782,8 +783,8 @@ a {
 }
 
 .ghost-button {
-  background: #e5e5e2;
-  color: #303030;
+  background: var(--chip);
+  color: var(--text);
 }
 
 .error {
@@ -839,8 +840,8 @@ a {
 .todo-item {
   padding: 16px;
   border-radius: 18px;
-  background: #f8f8f6;
-  border: 1px solid #e2e2de;
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
 }
 
 .todo-item-header {

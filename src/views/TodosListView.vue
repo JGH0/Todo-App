@@ -571,8 +571,8 @@ onBeforeUnmount(() => {
 .todo-item {
 	padding: 18px 20px;
 	border-radius: 24px;
-	background: #f8f8f6;
-	border: 1px solid #e2e2de;
+	background: var(--surface-muted);
+	border: 1px solid var(--border);
 	display: flex;
 	flex-direction: column;
 	gap: 10px;
@@ -593,7 +593,7 @@ onBeforeUnmount(() => {
 	width: 28px;
 	height: 28px;
 	border-radius: 50%;
-	border: 2px solid #888;
+	border: 2px solid var(--text-muted);
 	background: transparent;
 	cursor: pointer;
 	padding: 0;
@@ -726,7 +726,7 @@ onBeforeUnmount(() => {
 	padding: 40px 20px;
 	text-align: center;
 	color: var(--text-muted);
-	background: rgba(255,255,255,0.4);
+	background: var(--surface-muted);
 	border-radius: 18px;
 }
 
@@ -796,7 +796,8 @@ onBeforeUnmount(() => {
 }
 
 .modal-card {
-	background: white;
+	background: var(--modal-bg);
+	color: var(--text);
 	border-radius: 28px;
 	padding: 24px;
 	width: 90%;
@@ -815,7 +816,7 @@ onBeforeUnmount(() => {
 
 .modal-header h3 {
 	margin: 0;
-	color: #333;
+	color: var(--text-strong);
 }
 
 .close-btn {
@@ -852,7 +853,8 @@ onBeforeUnmount(() => {
 	border-radius: 12px;
 	padding: 10px 12px;
 	font: inherit;
-	background: white;
+	background: var(--input-bg);
+	color: var(--text);
 }
 
 .field input:focus,
@@ -900,7 +902,7 @@ onBeforeUnmount(() => {
 	padding: 8px 16px;
 	cursor: pointer;
 	white-space: nowrap;
-	color: #000;
+	color: var(--text);
 }
 
 .checkbox-field {
@@ -917,7 +919,7 @@ onBeforeUnmount(() => {
 }
 
 .checkbox-field label span {
-	color: #000;
+	color: var(--text);
 }
 
 .modal-footer {
@@ -943,8 +945,8 @@ onBeforeUnmount(() => {
 }
 
 .secondary-button {
-	background: #e5e5e2;
-	color: #303030;
+	background: var(--chip);
+	color: var(--text);
 }
 
 .danger-button {
@@ -967,7 +969,8 @@ onBeforeUnmount(() => {
 	padding: 8px 12px;
 	border: 1px solid var(--border);
 	border-radius: 999px;
-	background: white;
+	background: var(--input-bg);
+	color: var(--text);
 	font-size: 0.9rem;
 	min-width: 180px;
 }
@@ -981,7 +984,8 @@ onBeforeUnmount(() => {
 	padding: 8px 12px;
 	border: 1px solid var(--border);
 	border-radius: 999px;
-	background: white;
+	background: var(--input-bg);
+	color: var(--text);
 	font-size: 0.9rem;
 	cursor: pointer;
 }

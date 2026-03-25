@@ -307,8 +307,8 @@ onMounted(() => {
 	justify-content: space-between;
 	align-items: center;
 	padding: 12px 16px;
-	background: #f8f8f6;
-	border: 1px solid #e2e2de;
+	background: var(--surface-muted);
+	border: 1px solid var(--border);
 	border-radius: 20px;
 }
 
@@ -353,7 +353,8 @@ onMounted(() => {
 	padding: 4px 8px;
 	border: 1px solid var(--border);
 	border-radius: 8px;
-	background: white;
+	background: var(--input-bg);
+	color: var(--text);
 	width: auto;
 	min-width: 150px;
 }
@@ -443,7 +444,8 @@ onMounted(() => {
 }
 
 .modal-card {
-	background: white;
+	background: var(--modal-bg);
+	color: var(--text);
 	border-radius: 28px;
 	padding: 24px;
 	width: 90%;
@@ -466,7 +468,7 @@ onMounted(() => {
 
 .modal-header h3 {
 	margin: 0;
-	color: #333;
+	color: var(--text-strong);
 }
 
 .close-btn {
@@ -476,6 +478,7 @@ onMounted(() => {
 	cursor: pointer;
 	padding: 0;
 	line-height: 1;
+	color: var(--text);
 }
 
 .modal-body {
@@ -503,7 +506,8 @@ onMounted(() => {
 	border-radius: 12px;
 	padding: 10px 12px;
 	font: inherit;
-	background: white;
+	background: var(--input-bg);
+	color: var(--text);
 }
 
 .field input:focus,
@@ -549,8 +553,8 @@ onMounted(() => {
 }
 
 .secondary-button {
-	background: #e5e5e2;
-	color: #303030;
+	background: var(--chip);
+	color: var(--text);
 }
 
 .danger-button {

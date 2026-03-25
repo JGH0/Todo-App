@@ -62,6 +62,10 @@ import { RouterLink, RouterView } from 'vue-router'
 </template>
 
 <script>
+import { applyTheme, loadTheme } from '@/utils/themeSettings'
+// Apply stored theme before first render
+applyTheme(loadTheme())
+
 import SettingsView from '@/views/SettingsView.vue'
 import AiAssistantView from './views/AiAssistantView.vue'
 import TodoCreateForm from './views/TodoCreateForm.vue'
@@ -163,22 +167,24 @@ export default {
 	min-height: 100vh;
 	display: grid;
 	grid-template-columns: 250px 1fr;
-	background: #f5f5f5;
-	color: #1f1f1f;
+	background: var(--bg);
+	color: var(--text);
+	transition: background 0.3s, color 0.3s;
 }
 
 /* Sidebar */
 .sidebar {
-	background: #ffffff;
-	border-right: 1px solid #d0d0d0;
+	background: var(--sidebar-bg);
+	border-right: 1px solid var(--sidebar-border);
 	padding: 20px 16px;
 	z-index: 20;
+	transition: background 0.3s, border-color 0.3s;
 }
 
 .user {
 	font-size: 20px;
 	font-weight: 600;
-	color: #111;
+	color: var(--sidebar-text);
 	margin-bottom: 18px;
 }
 
@@ -195,22 +201,22 @@ export default {
 	padding: 6px 0;
 	text-align: left;
 	cursor: pointer;
-	color: #222;
+	color: var(--sidebar-text);
 	font-weight: 500;
 }
 
 .nav-btn:hover,
 .list li:hover,
 .settings:hover {
-	color: #000;
+	opacity: 0.75;
 }
 
 .section-title {
-	border-top: 1px solid #ddd;
+	border-top: 1px solid var(--sidebar-border);
 	padding-top: 12px;
 	margin-top: 14px;
 	font-weight: 600;
-	color: #222;
+	color: var(--sidebar-text);
 }
 
 .list {
@@ -222,7 +228,7 @@ export default {
 .list li {
 	padding: 6px 0;
 	cursor: pointer;
-	color: #222;
+	color: var(--sidebar-text);
 }
 
 /* Content */
@@ -231,8 +237,8 @@ export default {
 }
 
 .card {
-	background: #fff;
-	border: 1px solid #d9d9d9;
+	background: var(--surface);
+	border: 1px solid var(--border);
 	padding: 18px;
 }
 
@@ -242,8 +248,8 @@ export default {
 	align-items: center;
 	gap: 12px;
 	padding: 12px 16px;
-	background: #fff;
-	border-bottom: 1px solid #d0d0d0;
+	background: var(--sidebar-bg);
+	border-bottom: 1px solid var(--sidebar-border);
 	grid-column: 1 / -1;
 }
 
@@ -252,7 +258,7 @@ export default {
 	background: none;
 	border: 0;
 	cursor: pointer;
-	color: #111;
+	color: var(--sidebar-text);
 }
 
 /* Backdrop */
@@ -280,7 +286,7 @@ export default {
 		left: 0;
 		right: 0;
 		border-right: 0;
-		border-bottom: 1px solid #d0d0d0;
+		border-bottom: 1px solid var(--sidebar-border);
 		display: none;
 	}
 
