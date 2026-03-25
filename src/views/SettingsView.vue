@@ -9,7 +9,9 @@ import {
   saveAiSettings,
 } from '@/utils/aiSettings'
 import { getAutoDeleteMinutes, setAutoDeleteMinutes, AUTO_DELETE_MINUTES_KEY } from '@/utils/appSettings'
+import { useTheme } from '@/composables/useTheme'
 
+const { theme, availableThemes } = useTheme()
 const form = ref(loadAiSettings())
 const modelsLoading = ref(false)
 const connectionStatus = ref(getInitialStatus())
@@ -389,6 +391,21 @@ watch(
           Compatible endpoints are detected from the active connection target. OpenAI‑style and Ollama‑style model lists are both
           supported. Use a base URL such as <code>https://api.openai.com/v1</code>, not the full endpoint path.
         </p>
+      </article>
+
+      <article class="panel">
+        <h2>Theme</h2>
+        <div class="row">
+          <label for="theme-select">Appearance</label>
+          <select id="theme-select" v-model="theme">
+            <option v-for="t in availableThemes" :key="t.id" :value="t.id">
+              {{ t.name }}
+            </option>
+          </select>
+          <p class="hint">
+            Choose your preferred colour scheme. Changes apply immediately.
+          </p>
+        </div>
       </article>
 
       <article class="panel">

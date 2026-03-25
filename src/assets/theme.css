@@ -1,0 +1,112 @@
+/* Light theme (default) */
+:root,
+.theme-light {
+  --surface: rgba(255, 255, 255, 0.7);
+  --surface-strong: #ffffff;
+  --border: #cfcfcb;
+  --line: #b9b9b5;
+  --accent: #274f69;
+  --accent-soft: #d6e4ec;
+  --text-primary: #111;
+  --text-secondary: #444;
+  --chip: #d8d8d8;
+  --success: #dff7e7;
+  --danger: #d32f2f;
+  --danger-soft: rgba(211, 47, 47, 0.1);
+}
+
+/* Dark theme */
+.theme-dark {
+  --surface: rgba(30, 30, 35, 0.85);
+  --surface-strong: #1e1e23;
+  --border: #3a3a44;
+  --line: #4a4a55;
+  --accent: #5f9ea0;
+  --accent-soft: #2c4a4c;
+  --text-primary: #eee;
+  --text-secondary: #aaa;
+  --chip: #2c2c33;
+  --success: #2e6b3e;
+  --danger: #ff6b6b;
+  --danger-soft: rgba(255, 107, 107, 0.1);
+}
+
+/* Solarized Light */
+.theme-solarized-light {
+  --surface: rgba(253, 246, 227, 0.85);
+  --surface-strong: #fdf6e3;
+  --border: #93a1a1;
+  --line: #839496;
+  --accent: #268bd2;
+  --accent-soft: #dc322f;
+  --text-primary: #586e75;
+  --text-secondary: #839496;
+  --chip: #eee8d5;
+  --success: #859900;
+  --danger: #dc322f;
+  --danger-soft: rgba(220, 50, 47, 0.1);
+}
+
+/* Solarized Dark */
+.theme-solarized-dark {
+  --surface: rgba(0, 43, 54, 0.85);
+  --surface-strong: #002b36;
+  --border: #586e75;
+  --line: #657b83;
+  --accent: #268bd2;
+  --accent-soft: #dc322f;
+  --text-primary: #93a1a1;
+  --text-secondary: #839496;
+  --chip: #073642;
+  --success: #859900;
+  --danger: #dc322f;
+  --danger-soft: rgba(220, 50, 47, 0.1);
+}
+
+/* Catppuccin Macchiato */
+.theme-catppuccin-macchiato {
+  --surface: rgba(36, 39, 58, 0.85);
+  --surface-strong: #24273a;
+  --border: #494d64;
+  --line: #5b6078;
+  --accent: #8aadf4;
+  --accent-soft: #c6a0f6;
+  --text-primary: #cad3f5;
+  --text-secondary: #a5adcb;
+  --chip: #1e2030;
+  --success: #a6da95;
+  --danger: #ed8796;
+  --danger-soft: rgba(237, 135, 150, 0.1);
+}
+
+/* VS Code Dark+ */
+.theme-vscode-dark {
+  --surface: rgba(30, 30, 30, 0.85);
+  --surface-strong: #1e1e1e;
+  --border: #3c3c3c;
+  --line: #4e4e4e;
+  --accent: #007acc;
+  --accent-soft: #3794ff;
+  --text-primary: #cccccc;
+  --text-secondary: #9d9d9d;
+  --chip: #2d2d2d;
+  --success: #6a9955;
+  --danger: #f48771;
+  --danger-soft: rgba(244, 135, 113, 0.1);
+}
+
+/* KDE Breeze Light */
+.theme-breeze-light {
+  --surface: rgba(252, 252, 252, 0.85);
+  --surface-strong: #fcfcfc;
+  --border: #cfcfcf;
+  --line: #b7b7b7;
+  --accent: #3daee9;
+  --accent-soft: #1e7eb0;
+  --text-primary: #2c2c2c;
+  --text-secondary: #6c6c6c;
+  --chip: #e4e4e4;
+  --success: #27ae60;
+  --danger: #da4453;
+  --danger-soft: rgba(218, 68, 83, 0.1);
+}

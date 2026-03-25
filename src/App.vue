@@ -1,30 +1,24 @@
 <script setup>
 import { RouterLink, RouterView } from 'vue-router'
+import { useTheme } from '@/composables/useTheme'
+
+// Initialize theme (applies saved theme on mount)
+useTheme()
 </script>
 
 <template>
 	<div class="app-shell">
 		<!-- Mobile Header -->
 		<header class="mobile-header">
-			<button class="hamburger" @click="sidebarOpen = true">
-				☰
-			</button>
+			<button class="hamburger" @click="sidebarOpen = true">☰</button>
 			<span class="mobile-title">{{ currentView }}</span>
 		</header>
 
 		<!-- Mobile Backdrop -->
-		<div
-			v-if="sidebarOpen"
-			class="backdrop"
-			@click="sidebarOpen = false"
-		/>
+		<div v-if="sidebarOpen" class="backdrop" @click="sidebarOpen = false" />
 
 		<!-- Sidebar -->
-		<aside
-			class="sidebar"
-			:class="{ open: sidebarOpen }"
-			@click.stop
-		>
+		<aside class="sidebar" :class="{ open: sidebarOpen }" @click.stop>
 			<div class="user">User XY</div>
 
 			<nav class="top-links">
@@ -49,9 +43,7 @@ import { RouterLink, RouterView } from 'vue-router'
 				</li>
 			</ul>
 
-			<button class="settings" @click="setView('settings')">
-				Settings
-			</button>
+			<button class="settings" @click="setView('settings')">Settings</button>
 		</aside>
 
 		<!-- Content -->
@@ -86,10 +78,10 @@ export default {
 		TodoCreateForm,
 		TodosListView,
 		CategoryManagementView,
+		RecurringTasksView,
 		SearchView: { components: { SimpleView }, template: `<SimpleView title="Search" />` },
 		FiltersView: { components: { SimpleView }, template: `<SimpleView title="Filters" />` },
 		AiAssistantView,
-		RecurringTasksView
 	},
 
 	data() {
@@ -139,14 +131,12 @@ export default {
 			}
 		},
 		setView(view) {
-			// Check if view matches any category name (case-insensitive)
 			const matchedCategory = this.categories.find(cat => 
 				cat.name.toLowerCase() === view.toLowerCase()
 			)
-			
 			if (matchedCategory) {
 				this.currentView = 'todos'
-				this.currentCategory = matchedCategory.name // pass the exact category name
+				this.currentCategory = matchedCategory.name
 			} else {
 				this.currentView = view
 				this.currentCategory = null
@@ -163,14 +153,14 @@ export default {
 	min-height: 100vh;
 	display: grid;
 	grid-template-columns: 250px 1fr;
-	background: #f5f5f5;
-	color: #1f1f1f;
+	background: var(--surface);
+	color: var(--text-primary);
 }
 
 /* Sidebar */
 .sidebar {
-	background: #ffffff;
-	border-right: 1px solid #d0d0d0;
+	background: var(--surface-strong);
+	border-right: 1px solid var(--border);
 	padding: 20px 16px;
 	z-index: 20;
 }
@@ -178,7 +168,7 @@ export default {
 .user {
 	font-size: 20px;
 	font-weight: 600;
-	color: #111;
+	color: var(--text-primary);
 	margin-bottom: 18px;
 }
 
@@ -195,22 +185,23 @@ export default {
 	padding: 6px 0;
 	text-align: left;
 	cursor: pointer;
-	color: #222;
+	color: var(--text-secondary);
 	font-weight: 500;
+	transition: color 0.2s;
 }
 
 .nav-btn:hover,
 .list li:hover,
 .settings:hover {
-	color: #000;
+	color: var(--text-primary);
 }
 
 .section-title {
-	border-top: 1px solid #ddd;
+	border-top: 1px solid var(--border);
 	padding-top: 12px;
 	margin-top: 14px;
 	font-weight: 600;
-	color: #222;
+	color: var(--text-secondary);
 }
 
 .list {
@@ -222,7 +213,8 @@ export default {
 .list li {
 	padding: 6px 0;
 	cursor: pointer;
-	color: #222;
+	color: var(--text-secondary);
+	transition: color 0.2s;
 }
 
 /* Content */
@@ -231,9 +223,10 @@ export default {
 }
 
 .card {
-	background: #fff;
-	border: 1px solid #d9d9d9;
+	background: var(--surface-strong);
+	border: 1px solid var(--border);
 	padding: 18px;
+	color: var(--text-primary);
 }
 
 /* Mobile Header */
@@ -242,9 +235,14 @@ export default {
 	align-items: center;
 	gap: 12px;
 	padding: 12px 16px;
-	background: #fff;
-	border-bottom: 1px solid #d0d0d0;
+	background: var(--surface-strong);
+	border-bottom: 1px solid var(--border);
 	grid-column: 1 / -1;
+}
+
+.mobile-title {
+	color: var(--text-primary);
+	font-weight: 500;
 }
 
 .hamburger {
@@ -252,7 +250,7 @@ export default {
 	background: none;
 	border: 0;
 	cursor: pointer;
-	color: #111;
+	color: var(--text-primary);
 }
 
 /* Backdrop */
@@ -280,7 +278,7 @@ export default {
 		left: 0;
 		right: 0;
 		border-right: 0;
-		border-bottom: 1px solid #d0d0d0;
+		border-bottom: 1px solid var(--border);
 		display: none;
 	}
 
