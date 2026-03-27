@@ -33,6 +33,12 @@ Todo-App aims to provide a clean and intuitive interface for managing your to-do
 ```bash
 npm install
 ```
+### Run Json Server
+
+```bash
+mv db.sample.json db.json
+npm run server
+```
 
 ### Development
 
