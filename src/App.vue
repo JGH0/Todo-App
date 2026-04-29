@@ -62,9 +62,12 @@ import { RouterLink, RouterView } from 'vue-router'
 </template>
 
 <script>
-import { applyTheme, loadTheme } from '@/utils/themeSettings'
-// Apply stored theme before first render
-applyTheme(loadTheme())
+import { applyTheme, loadTheme, applyWallpaper, loadWallpaper } from '@/utils/themeSettings'
+// Apply stored theme and wallpaper before first render — skip when Theme Store preview injects via ?__theme
+if (!new URLSearchParams(location.search).has('__theme')) {
+  applyTheme(loadTheme())
+  applyWallpaper(loadWallpaper())
+}
 
 import SettingsView from '@/views/SettingsView.vue'
 import AiAssistantView from './views/AiAssistantView.vue'
@@ -168,8 +171,12 @@ export default {
 	display: grid;
 	grid-template-columns: 250px 1fr;
 	background: var(--bg);
+	background-image: var(--wallpaper, none);
+	background-size: cover;
+	background-position: center;
+	background-attachment: fixed;
 	color: var(--text);
-	transition: background 0.3s, color 0.3s;
+	transition: background-color 0.3s, color 0.3s;
 }
 
 /* Sidebar */

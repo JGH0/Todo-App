@@ -1,4 +1,6 @@
 export const THEME_STORAGE_KEY = 'todo-app.theme'
+export const CUSTOM_THEMES_KEY = 'todo-app.custom-themes'
+export const WALLPAPER_KEY = 'todo-app.wallpaper'
 
 export const themes = [
   // ── Light themes ──────────────────────────────────────────────────────────
@@ -356,16 +358,115 @@ export const themes = [
   },
 ]
 
+// Labels and groupings used by the custom theme creator UI
+export const CSS_VAR_LABELS = {
+  '--bg': 'Background',
+  '--surface': 'Surface',
+  '--surface-strong': 'Surface Strong',
+  '--surface-muted': 'Surface Muted',
+  '--border': 'Border',
+  '--line': 'Line',
+  '--text': 'Text',
+  '--text-muted': 'Text Muted',
+  '--text-strong': 'Text Strong',
+  '--accent': 'Accent',
+  '--accent-text': 'Accent Text',
+  '--accent-soft': 'Accent Soft',
+  '--sidebar-bg': 'Sidebar Background',
+  '--sidebar-border': 'Sidebar Border',
+  '--sidebar-text': 'Sidebar Text',
+  '--sidebar-text-muted': 'Sidebar Text Muted',
+  '--input-bg': 'Input Background',
+  '--input-border': 'Input Border',
+  '--modal-bg': 'Modal Background',
+  '--chip': 'Chip',
+  '--success': 'Success',
+}
+
+export const CSS_VAR_GROUPS = [
+  { label: 'Backgrounds', vars: ['--bg', '--surface', '--surface-strong', '--surface-muted'] },
+  { label: 'Borders', vars: ['--border', '--line'] },
+  { label: 'Text', vars: ['--text', '--text-muted', '--text-strong'] },
+  { label: 'Accent', vars: ['--accent', '--accent-text', '--accent-soft'] },
+  { label: 'Sidebar', vars: ['--sidebar-bg', '--sidebar-border', '--sidebar-text', '--sidebar-text-muted'] },
+  { label: 'Inputs & Modal', vars: ['--input-bg', '--input-border', '--modal-bg'] },
+  { label: 'Other', vars: ['--chip', '--success'] },
+]
+
+export function loadCustomThemes() {
+  try {
+    return JSON.parse(localStorage.getItem(CUSTOM_THEMES_KEY) || '[]')
+  } catch {
+    return []
+  }
+}
+
+export function saveCustomThemes(customThemes) {
+  localStorage.setItem(CUSTOM_THEMES_KEY, JSON.stringify(customThemes))
+}
+
+export function getAllThemes() {
+  return [...themes, ...loadCustomThemes()]
+}
+
 export function loadTheme() {
   return localStorage.getItem(THEME_STORAGE_KEY) || 'light'
 }
 
 export function applyTheme(themeId) {
-  const theme = themes.find((t) => t.id === themeId) || themes[0]
+  const all = getAllThemes()
+  const theme = all.find((t) => t.id === themeId) || themes[0]
   const root = document.documentElement
   for (const [key, value] of Object.entries(theme.vars)) {
     root.style.setProperty(key, value)
   }
   localStorage.setItem(THEME_STORAGE_KEY, themeId)
   window.dispatchEvent(new CustomEvent('theme-changed', { detail: themeId }))
+}
+
+// ── Wallpaper ──────────────────────────────────────────────────────────────
+
+export function loadWallpaper() {
+  return localStorage.getItem(WALLPAPER_KEY) || null
+}
+
+export function saveWallpaper(dataUrl) {
+  if (dataUrl) {
+    localStorage.setItem(WALLPAPER_KEY, dataUrl)
+  } else {
+    localStorage.removeItem(WALLPAPER_KEY)
+  }
+}
+
+export function applyWallpaper(dataUrl) {
+  const root = document.documentElement
+  if (dataUrl) {
+    root.style.setProperty('--wallpaper', `url("${dataUrl}")`)
+  } else {
+    root.style.removeProperty('--wallpaper')
+  }
+}
+
+// ── CSS export (marketplace-compatible) ───────────────────────────────────
+// The marketplace reads the @todo-theme-meta JSON comment to get metadata,
+// then extracts CSS variables from :root to reconstruct the theme object.
+
+export function exportThemeAsCss(theme, wallpaperDataUrl = null) {
+  const meta = {
+    name: theme.name,
+    id: theme.id,
+    group: theme.group,
+    preview: theme.preview,
+    hasWallpaper: !!wallpaperDataUrl,
+  }
+
+  const varLines = Object.entries(theme.vars)
+    .map(([k, v]) => `  ${k}: ${v};`)
+    .join('\n')
+
+  const wallpaperLine = wallpaperDataUrl
+    ? `\n  --wallpaper: url("${wallpaperDataUrl}");`
+    : ''
+
+  return `/* @todo-theme-meta\n${JSON.stringify(meta, null, 2)}\n*/\n\n:root {\n${varLines}${wallpaperLine}\n}\n`
 }

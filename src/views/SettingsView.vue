@@ -9,20 +9,118 @@ import {
   saveAiSettings,
 } from '@/utils/aiSettings'
 import { getAutoDeleteMinutes, setAutoDeleteMinutes, AUTO_DELETE_MINUTES_KEY } from '@/utils/appSettings'
-import { themes, loadTheme, applyTheme } from '@/utils/themeSettings'
+import {
+  themes,
+  loadTheme,
+  applyTheme,
+  loadCustomThemes,
+  saveCustomThemes,
+  getAllThemes,
+  exportThemeAsCss,
+  loadWallpaper,
+  saveWallpaper,
+  applyWallpaper,
+  CSS_VAR_LABELS,
+  CSS_VAR_GROUPS,
+} from '@/utils/themeSettings'
 import { getTodos } from '@/services/todoService'
 import { getCategories } from '@/services/categoryService'
 
 // ── Theme ──────────────────────────────────────────────────────────────────
 const currentTheme = ref(loadTheme())
-const themeGroups = ['Light', 'Dark', 'Colorful']
+const themeGroups = ['Light', 'Dark', 'Colorful', 'Custom']
+const customThemes = ref(loadCustomThemes())
+
+const allThemesList = computed(() => [...themes, ...customThemes.value])
+
 const themesByGroup = computed(() =>
-  Object.fromEntries(themeGroups.map((g) => [g, themes.filter((t) => t.group === g)]))
+  Object.fromEntries(
+    themeGroups.map((g) => [g, allThemesList.value.filter((t) => t.group === g)])
+  )
 )
 
 function selectTheme(id) {
   currentTheme.value = id
   applyTheme(id)
+}
+
+// ── Custom theme creator ───────────────────────────────────────────────────
+const showThemeCreator = ref(false)
+
+function blankThemeForm() {
+  const base = themes.find((t) => t.id === 'light')
+  return { name: '', baseId: 'light', vars: { ...base.vars } }
+}
+
+const themeForm = ref(blankThemeForm())
+
+function openThemeCreator() {
+  themeForm.value = blankThemeForm()
+  showThemeCreator.value = true
+}
+
+function loadBaseTheme() {
+  const base = allThemesList.value.find((t) => t.id === themeForm.value.baseId)
+  if (base) themeForm.value.vars = { ...base.vars }
+}
+
+function saveCustomTheme() {
+  const name = themeForm.value.name.trim() || 'Custom Theme'
+  const id = 'custom-' + Date.now()
+  const newTheme = {
+    id,
+    name,
+    group: 'Custom',
+    preview: [
+      themeForm.value.vars['--bg'],
+      themeForm.value.vars['--surface'],
+      themeForm.value.vars['--accent'],
+    ],
+    vars: { ...themeForm.value.vars },
+  }
+  customThemes.value = [...customThemes.value, newTheme]
+  saveCustomThemes(customThemes.value)
+  showThemeCreator.value = false
+  selectTheme(id)
+}
+
+function deleteCustomTheme(id) {
+  customThemes.value = customThemes.value.filter((t) => t.id !== id)
+  saveCustomThemes(customThemes.value)
+  if (currentTheme.value === id) selectTheme('light')
+}
+
+function downloadTheme(theme) {
+  const css = exportThemeAsCss(theme, wallpaperDataUrl.value)
+  downloadFile(css, `${theme.id}.css`, 'text/css')
+}
+
+// ── Wallpaper ──────────────────────────────────────────────────────────────
+const wallpaperDataUrl = ref(loadWallpaper())
+const wallpaperError = ref('')
+
+function handleWallpaperUpload(event) {
+  const file = event.target.files[0]
+  if (!file) return
+  wallpaperError.value = ''
+  if (file.size > 3 * 1024 * 1024) {
+    wallpaperError.value = 'Image is larger than 3 MB — consider a smaller file for best performance.'
+  }
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    wallpaperDataUrl.value = e.target.result
+    saveWallpaper(e.target.result)
+    applyWallpaper(e.target.result)
+  }
+  reader.readAsDataURL(file)
+  event.target.value = ''
+}
+
+function removeWallpaper() {
+  wallpaperDataUrl.value = null
+  wallpaperError.value = ''
+  saveWallpaper(null)
+  applyWallpaper(null)
 }
 
 const form = ref(loadAiSettings())
