@@ -153,8 +153,14 @@ export default {
 	min-height: 100vh;
 	display: grid;
 	grid-template-columns: 250px 1fr;
+<<<<<<< Updated upstream
 	background: var(--surface);
 	color: var(--text-primary);
+=======
+	background: var(--bg);
+	color: var(--text);
+	transition: background-color 0.3s, color 0.3s;
+>>>>>>> Stashed changes
 }
 
 /* Sidebar */

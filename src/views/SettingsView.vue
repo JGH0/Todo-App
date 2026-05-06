@@ -9,7 +9,125 @@ import {
   saveAiSettings,
 } from '@/utils/aiSettings'
 import { getAutoDeleteMinutes, setAutoDeleteMinutes, AUTO_DELETE_MINUTES_KEY } from '@/utils/appSettings'
+<<<<<<< Updated upstream
 import { useTheme } from '@/composables/useTheme'
+=======
+import {
+  themes,
+  loadTheme,
+  applyTheme,
+  loadCustomThemes,
+  saveCustomThemes,
+  getAllThemes,
+  exportThemeAsCss,
+  loadWallpaper,
+  saveWallpaper,
+  applyWallpaper,
+  CSS_VAR_LABELS,
+  CSS_VAR_GROUPS,
+} from '@/utils/themeSettings'
+import { getTodos } from '@/services/todoService'
+import { getCategories } from '@/services/categoryService'
+
+// ── Theme ──────────────────────────────────────────────────────────────────
+const currentTheme = ref(loadTheme())
+const themeGroups = ['Light', 'Dark', 'Colorful', 'Custom']
+const customThemes = ref(loadCustomThemes())
+
+const allThemesList = computed(() => [...themes, ...customThemes.value])
+
+const themesByGroup = computed(() =>
+  Object.fromEntries(
+    themeGroups.map((g) => [g, allThemesList.value.filter((t) => t.group === g)])
+  )
+)
+
+function selectTheme(id) {
+  currentTheme.value = id
+  applyTheme(id)
+}
+
+// ── Custom theme creator ───────────────────────────────────────────────────
+const showThemeCreator = ref(false)
+
+function blankThemeForm() {
+  const base = themes.find((t) => t.id === 'light')
+  return { name: '', baseId: 'light', vars: { ...base.vars } }
+}
+
+const themeForm = ref(blankThemeForm())
+
+function openThemeCreator() {
+  themeForm.value = blankThemeForm()
+  showThemeCreator.value = true
+}
+
+function loadBaseTheme() {
+  const base = allThemesList.value.find((t) => t.id === themeForm.value.baseId)
+  if (base) themeForm.value.vars = { ...base.vars }
+}
+
+function saveCustomTheme() {
+  const name = themeForm.value.name.trim() || 'Custom Theme'
+  const id = 'custom-' + Date.now()
+  const newTheme = {
+    id,
+    name,
+    group: 'Custom',
+    preview: [
+      themeForm.value.vars['--bg'],
+      themeForm.value.vars['--surface'],
+      themeForm.value.vars['--accent'],
+    ],
+    vars: { ...themeForm.value.vars },
+  }
+  customThemes.value = [...customThemes.value, newTheme]
+  saveCustomThemes(customThemes.value)
+  showThemeCreator.value = false
+  selectTheme(id)
+}
+
+function deleteCustomTheme(id) {
+  customThemes.value = customThemes.value.filter((t) => t.id !== id)
+  saveCustomThemes(customThemes.value)
+  if (currentTheme.value === id) selectTheme('light')
+}
+
+function downloadTheme(theme) {
+  const css = exportThemeAsCss(theme, wallpaperDataUrl.value)
+  downloadFile(css, `${theme.id}.css`, 'text/css')
+}
+
+// ── Wallpaper ──────────────────────────────────────────────────────────────
+const wallpaperDataUrl = ref(loadWallpaper())
+const wallpaperError = ref('')
+
+function handleWallpaperUpload(event) {
+  const file = event.target.files[0]
+  if (!file) return
+  wallpaperError.value = ''
+  const reader = new FileReader()
+  reader.onload = (e) => {
+    const dataUrl = e.target.result
+    const saved = saveWallpaper(dataUrl)
+    if (!saved) {
+      wallpaperError.value = 'Image is too large to store in browser storage. Try a smaller or more compressed image (aim for under 1 MB).'
+      return
+    }
+    wallpaperDataUrl.value = dataUrl
+    applyWallpaper(dataUrl)
+  }
+  reader.readAsDataURL(file)
+  event.target.value = ''
+}
+
+function removeWallpaper() {
+  wallpaperDataUrl.value = null
+  wallpaperError.value = ''
+  saveWallpaper(null)
+  applyWallpaper(null)
+}
+>>>>>>> Stashed changes
 
 const { theme, availableThemes } = useTheme()
 const form = ref(loadAiSettings())
@@ -394,6 +512,7 @@ watch(
       </article>
 
       <article class="panel">
+<<<<<<< Updated upstream
         <h2>Theme</h2>
         <div class="row">
           <label for="theme-select">Appearance</label>
@@ -405,6 +524,94 @@ watch(
           <p class="hint">
             Choose your preferred colour scheme. Changes apply immediately.
           </p>
+=======
+        <h2>Appearance</h2>
+        <p class="hint">Choose a theme. Hover a swatch to download it as a CSS file for the marketplace.</p>
+
+        <div v-for="group in themeGroups" :key="group" class="theme-group">
+          <h3 class="group-label">{{ group }}</h3>
+          <div class="theme-grid">
+            <div v-for="theme in themesByGroup[group]" :key="theme.id" class="theme-swatch-wrap">
+              <button
+                class="theme-swatch"
+                :class="{ active: currentTheme === theme.id }"
+                :title="theme.name"
+                @click="selectTheme(theme.id)"
+              >
+                <span class="swatch-colors">
+                  <span class="swatch-dot" :style="{ background: theme.preview[0] }" />
+                  <span class="swatch-dot" :style="{ background: theme.preview[1] }" />
+                  <span class="swatch-dot" :style="{ background: theme.preview[2] }" />
+                </span>
+                <span class="swatch-label">{{ theme.name }}</span>
+              </button>
+              <div class="swatch-actions">
+                <button class="icon-btn" title="Download theme as CSS" @click.stop="downloadTheme(theme)">&#8595;</button>
+                <button
+                  v-if="theme.group === 'Custom'"
+                  class="icon-btn danger"
+                  title="Delete theme"
+                  @click.stop="deleteCustomTheme(theme.id)"
+                >&#x2715;</button>
+              </div>
+            </div>
+            <button v-if="group === 'Custom'" class="theme-swatch add-swatch" @click="openThemeCreator">
+              <span class="add-icon">+</span>
+              <span class="swatch-label">New</span>
+            </button>
+          </div>
+>>>>>>> Stashed changes
+        </div>
+
+        <!-- Custom theme creator -->
+        <div v-if="showThemeCreator" class="theme-creator">
+          <h3>Create Custom Theme</h3>
+
+          <div class="row">
+            <label>Name</label>
+            <input v-model="themeForm.name" type="text" placeholder="My Theme" />
+          </div>
+
+          <div class="row">
+            <label>Start from</label>
+            <select v-model="themeForm.baseId" @change="loadBaseTheme">
+              <option v-for="t in allThemesList" :key="t.id" :value="t.id">{{ t.name }}</option>
+            </select>
+          </div>
+
+          <div v-for="vg in CSS_VAR_GROUPS" :key="vg.label" class="var-group">
+            <h4 class="var-group-label">{{ vg.label }}</h4>
+            <div class="color-grid">
+              <label v-for="v in vg.vars" :key="v" class="color-row">
+                <input type="color" v-model="themeForm.vars[v]" />
+                <span>{{ CSS_VAR_LABELS[v] }}</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="actions creator-actions">
+            <button @click="saveCustomTheme">Save Theme</button>
+            <button class="btn-ghost" @click="showThemeCreator = false">Cancel</button>
+          </div>
+        </div>
+
+        <!-- Wallpaper -->
+        <div class="wallpaper-section">
+          <h3>Wallpaper</h3>
+          <p class="hint">
+            The wallpaper is embedded as base64 in downloaded theme CSS files, keeping them self-contained for marketplace uploads.
+          </p>
+          <div v-if="wallpaperDataUrl" class="wallpaper-preview">
+            <img :src="wallpaperDataUrl" alt="Wallpaper preview" />
+          </div>
+          <p v-if="wallpaperError" class="status warn">{{ wallpaperError }}</p>
+          <div class="actions">
+            <label class="btn-upload">
+              {{ wallpaperDataUrl ? 'Change Wallpaper' : 'Upload Wallpaper' }}
+              <input type="file" accept="image/*" @change="handleWallpaperUpload" />
+            </label>
+            <button v-if="wallpaperDataUrl" @click="removeWallpaper">Remove</button>
+          </div>
         </div>
       </article>
 
@@ -558,6 +765,232 @@ code {
   flex: 1;
 }
 
+<<<<<<< Updated upstream
+=======
+/* ── Appearance / theme swatches ── */
+.theme-group {
+  margin-bottom: 16px;
+}
+
+.group-label {
+  font-size: 13px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.08em;
+  color: var(--text-muted);
+  margin: 0 0 10px;
+}
+
+.theme-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 10px;
+}
+
+.theme-swatch-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.theme-swatch-wrap:hover .swatch-actions {
+  opacity: 1;
+}
+
+.swatch-actions {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.icon-btn {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  padding: 2px 7px;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  line-height: 1.4;
+}
+
+.icon-btn:hover {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.icon-btn.danger:hover {
+  background: #ffd5d5;
+  color: #b00;
+}
+
+.theme-swatch {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 6px;
+  background: transparent;
+  border: 2px solid var(--border);
+  border-radius: 12px;
+  padding: 8px 10px;
+  cursor: pointer;
+  transition: border-color 0.2s, transform 0.1s;
+  min-width: 72px;
+}
+
+.theme-swatch:hover {
+  border-color: var(--accent);
+  transform: translateY(-1px);
+}
+
+.theme-swatch.active {
+  border-color: var(--accent);
+  outline: 2px solid var(--accent);
+  outline-offset: 2px;
+}
+
+.add-swatch {
+  border-style: dashed;
+}
+
+.add-icon {
+  font-size: 22px;
+  line-height: 1;
+  color: var(--text-muted);
+}
+
+.swatch-colors {
+  display: flex;
+  gap: 3px;
+}
+
+.swatch-dot {
+  width: 18px;
+  height: 18px;
+  border-radius: 50%;
+  border: 1px solid rgba(0, 0, 0, 0.1);
+  display: block;
+}
+
+.swatch-label {
+  font-size: 11px;
+  color: var(--text-muted);
+  white-space: nowrap;
+}
+
+/* ── Custom theme creator ── */
+.theme-creator {
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  padding: 16px;
+  background: var(--surface-muted);
+}
+
+.theme-creator h3 {
+  margin: 0 0 14px;
+  font-size: 15px;
+}
+
+.var-group {
+  margin-bottom: 14px;
+}
+
+.var-group-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin: 0 0 8px;
+}
+
+.color-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.color-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.color-row input[type='color'] {
+  width: 28px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  background: none;
+}
+
+.creator-actions {
+  margin-top: 16px;
+  margin-bottom: 0;
+}
+
+.btn-ghost {
+  background: transparent !important;
+  border-color: var(--border) !important;
+  color: var(--text-muted) !important;
+}
+
+/* ── Wallpaper ── */
+.wallpaper-section {
+  margin-top: 20px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+
+.wallpaper-section h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.wallpaper-preview {
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin-bottom: 10px;
+}
+
+.wallpaper-preview img {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  display: block;
+}
+
+.btn-upload {
+  display: inline-block;
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--text);
+  padding: 9px 10px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.btn-upload:hover {
+  border-color: var(--accent);
+}
+
+.btn-upload input[type='file'] {
+  display: none;
+}
+
+.warn {
+  color: #b06000 !important;
+}
+
+>>>>>>> Stashed changes
 @media (max-width: 960px) {
   .settings-grid {
     grid-template-columns: 1fr;

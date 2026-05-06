@@ -81,3 +81,16 @@ body {
   -webkit-font-smoothing: antialiased;
   -moz-osx-font-smoothing: grayscale;
 }
+
+/* Wallpaper: applied on body so it sits behind the full layout */
+body.has-wallpaper {
+  background-image: var(--wallpaper);
+  background-size: cover;
+  background-position: center;
+  background-attachment: fixed;
+}
+
+/* Make the app shell transparent so the body wallpaper shows through the content gaps */
+body.has-wallpaper .app-shell {
+  background-color: transparent;
+}
