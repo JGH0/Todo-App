@@ -1,19 +1,25 @@
-import axios from 'axios'
+import axios from "axios";
+import { loadBackendUrl } from "@/utils/backendSettings";
 
 const api = axios.create({
-	baseURL: 'http://localhost:8080/api/v1',
+	baseURL: loadBackendUrl(),
 	headers: {
-		'Content-Type': 'application/json',
+		"Content-Type": "application/json",
 	},
-})
+});
+
+// Allow runtime URL updates without recreating the instance
+export function updateApiBaseUrl(newUrl) {
+	api.defaults.baseURL = newUrl;
+}
 
 // Add API key from localStorage if available
 api.interceptors.request.use((config) => {
-	const apiKey = localStorage.getItem('api_key')
+	const apiKey = localStorage.getItem("api_key");
 	if (apiKey) {
-		config.headers['X-API-Key'] = apiKey
+		config.headers["X-API-Key"] = apiKey;
 	}
-	return config
-})
+	return config;
+});
 
-export default api
+export default api;

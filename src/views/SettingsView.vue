@@ -1,5 +1,5 @@
 <script setup>
-import { computed, ref, watch, onUnmounted } from 'vue'
+import { computed, ref, watch, onMounted, onUnmounted } from "vue";
 import {
   buildModelsEndpointCandidates,
   DEFAULT_AI_SERVER_URL,
@@ -7,175 +7,338 @@ import {
   loadAiSettings,
   parseModels,
   saveAiSettings,
-} from '@/utils/aiSettings'
-import { getAutoDeleteMinutes, setAutoDeleteMinutes, AUTO_DELETE_MINUTES_KEY } from '@/utils/appSettings'
-import { themes, loadTheme, applyTheme } from '@/utils/themeSettings'
-import { getTodos } from '@/services/todoService'
-import { getCategories } from '@/services/categoryService'
-import { login, register, logout, getUser, isAuthenticated } from '@/services/authService'
+} from "@/utils/aiSettings";
+import {
+  getAutoDeleteMinutes,
+  setAutoDeleteMinutes,
+  AUTO_DELETE_MINUTES_KEY,
+} from "@/utils/appSettings";
+import {
+  themes,
+  loadTheme,
+  applyTheme,
+  loadCustomThemes,
+  saveCustomThemes,
+  loadExternalThemes,
+  saveExternalThemes,
+  getAllThemes,
+  getAllThemesWithExternal,
+  exportThemeAsCss,
+  loadWallpaper,
+  saveWallpaper,
+  applyWallpaper,
+  CSS_VAR_LABELS,
+  CSS_VAR_GROUPS,
+} from "@/utils/themeSettings";
+import {
+  loadBackendUrl,
+  saveBackendUrl,
+  getBackendPresetId,
+  BACKEND_PRESETS,
+} from "@/utils/backendSettings";
+import { updateApiBaseUrl } from "@/services/api";
+import { getTodos } from "@/services/todoService";
+import { getCategories } from "@/services/categoryService";
+import {
+  login,
+  register,
+  logout,
+  getUser,
+  isAuthenticated,
+} from "@/services/authService";
 
 // ── Theme ──────────────────────────────────────────────────────────────────
-const currentTheme = ref(loadTheme())
-const themeGroups = ['Light', 'Dark', 'Colorful']
+const currentTheme = ref(loadTheme());
+const themeGroups = ["Light", "Dark", "Colorful", "Custom", "External"];
+const customThemes = ref(loadCustomThemes());
+const externalThemes = ref(loadExternalThemes());
+
+const allThemesList = computed(() => [
+  ...themes,
+  ...customThemes.value,
+  ...externalThemes.value,
+]);
+
 const themesByGroup = computed(() =>
-  Object.fromEntries(themeGroups.map((g) => [g, themes.filter((t) => t.group === g)]))
-)
+  Object.fromEntries(
+    themeGroups.map((g) => [
+      g,
+      allThemesList.value.filter((t) => t.group === g),
+    ]),
+  ),
+);
 
 function selectTheme(id) {
-  currentTheme.value = id
-  applyTheme(id)
+  currentTheme.value = id;
+  applyTheme(id);
 }
 
-const form = ref(loadAiSettings())
-const modelsLoading = ref(false)
-const connectionStatus = ref(getInitialStatus())
+// ── Custom theme creator ───────────────────────────────────────────────────
+const showThemeCreator = ref(false);
 
-// Auto‑deletion: stored in minutes
-const autoDeleteMinutes = ref(getAutoDeleteMinutes())
+function blankThemeForm() {
+  const base = themes.find((t) => t.id === "light");
+  return { name: "", baseId: "light", vars: { ...base.vars } };
+}
+
+const themeForm = ref(blankThemeForm());
+
+function openThemeCreator() {
+  themeForm.value = blankThemeForm();
+  showThemeCreator.value = true;
+}
+
+function loadBaseTheme() {
+  const base = allThemesList.value.find((t) => t.id === themeForm.value.baseId);
+  if (base) themeForm.value.vars = { ...base.vars };
+}
+
+function saveCustomTheme() {
+  const name = themeForm.value.name.trim() || "Custom Theme";
+  const id = "custom-" + Date.now();
+  const newTheme = {
+    id,
+    name,
+    group: "Custom",
+    preview: [
+      themeForm.value.vars["--bg"],
+      themeForm.value.vars["--surface"],
+      themeForm.value.vars["--accent"],
+    ],
+    vars: { ...themeForm.value.vars },
+  };
+  customThemes.value = [...customThemes.value, newTheme];
+  saveCustomThemes(customThemes.value);
+  showThemeCreator.value = false;
+  selectTheme(id);
+}
+
+function deleteCustomTheme(id) {
+  customThemes.value = customThemes.value.filter((t) => t.id !== id);
+  saveCustomThemes(customThemes.value);
+  if (currentTheme.value === id) selectTheme("light");
+}
+
+function deleteExternalTheme(id) {
+  externalThemes.value = externalThemes.value.filter((t) => t.id !== id);
+  saveExternalThemes(externalThemes.value);
+  if (currentTheme.value === id) selectTheme("light");
+}
+
+// Listen for external theme updates
+const handleExternalThemesUpdate = () => {
+  externalThemes.value = loadExternalThemes();
+};
+
+onMounted(() => {
+  window.addEventListener(
+    "external-themes-updated",
+    handleExternalThemesUpdate,
+  );
+});
+
+onUnmounted(() => {
+  window.removeEventListener(
+    "external-themes-updated",
+    handleExternalThemesUpdate,
+  );
+});
+
+function downloadTheme(theme) {
+  const css = exportThemeAsCss(theme, wallpaperDataUrl.value);
+  downloadFile(css, `${theme.id}.css`, "text/css");
+}
+
+// ── Wallpaper ──────────────────────────────────────────────────────────────
+const wallpaperDataUrl = ref(loadWallpaper());
+const wallpaperError = ref("");
+
+function handleWallpaperUpload(event) {
+  const file = event.target.files[0];
+  if (!file) return;
+  wallpaperError.value = "";
+  if (file.size > 3 * 1024 * 1024) {
+    wallpaperError.value =
+      "Image is larger than 3 MB \u2014 consider a smaller file for best performance.";
+  }
+  const reader = new FileReader();
+  reader.onload = (e) => {
+    wallpaperDataUrl.value = e.target.result;
+    saveWallpaper(e.target.result);
+    applyWallpaper(e.target.result);
+  };
+  reader.readAsDataURL(file);
+  event.target.value = "";
+}
+
+function removeWallpaper() {
+  wallpaperDataUrl.value = null;
+  wallpaperError.value = "";
+  saveWallpaper(null);
+  applyWallpaper(null);
+}
+
+const form = ref(loadAiSettings());
+const modelsLoading = ref(false);
+const connectionStatus = ref(getInitialStatus());
+
+// Auto-deletion: stored in minutes
+const autoDeleteMinutes = ref(getAutoDeleteMinutes());
 
 // Display values
-const autoDeleteValue = ref(0)
-const autoDeleteUnit = ref('days')
+const autoDeleteValue = ref(0);
+const autoDeleteUnit = ref("days");
 
 // Convert stored minutes to display value and unit (preserving whole units)
 function syncDisplayFromMinutes(minutes) {
   if (minutes === 0) {
-    autoDeleteValue.value = 0
-    autoDeleteUnit.value = 'minutes'
-    return
+    autoDeleteValue.value = 0;
+    autoDeleteUnit.value = "minutes";
+    return;
   }
   // weeks
-  const weeks = minutes / (7 * 24 * 60)
+  const weeks = minutes / (7 * 24 * 60);
   if (Number.isInteger(weeks)) {
-    autoDeleteValue.value = weeks
-    autoDeleteUnit.value = 'weeks'
-    return
+    autoDeleteValue.value = weeks;
+    autoDeleteUnit.value = "weeks";
+    return;
   }
   // days
-  const days = minutes / (24 * 60)
+  const days = minutes / (24 * 60);
   if (Number.isInteger(days)) {
-    autoDeleteValue.value = days
-    autoDeleteUnit.value = 'days'
-    return
+    autoDeleteValue.value = days;
+    autoDeleteUnit.value = "days";
+    return;
   }
   // hours
-  const hours = minutes / 60
+  const hours = minutes / 60;
   if (Number.isInteger(hours)) {
-    autoDeleteValue.value = hours
-    autoDeleteUnit.value = 'hours'
-    return
+    autoDeleteValue.value = hours;
+    autoDeleteUnit.value = "hours";
+    return;
   }
   // minutes
-  autoDeleteValue.value = minutes
-  autoDeleteUnit.value = 'minutes'
+  autoDeleteValue.value = minutes;
+  autoDeleteUnit.value = "minutes";
 }
 
-syncDisplayFromMinutes(autoDeleteMinutes.value)
+syncDisplayFromMinutes(autoDeleteMinutes.value);
 
 // Watch display changes and update stored minutes
 watch([autoDeleteValue, autoDeleteUnit], () => {
-  let minutes = autoDeleteValue.value
-  if (autoDeleteUnit.value === 'weeks') minutes *= 7 * 24 * 60
-  else if (autoDeleteUnit.value === 'days') minutes *= 24 * 60
-  else if (autoDeleteUnit.value === 'hours') minutes *= 60
+  let minutes = autoDeleteValue.value;
+  if (autoDeleteUnit.value === "weeks") minutes *= 7 * 24 * 60;
+  else if (autoDeleteUnit.value === "days") minutes *= 24 * 60;
+  else if (autoDeleteUnit.value === "hours") minutes *= 60;
   if (!isNaN(minutes) && minutes >= 0) {
-    setAutoDeleteMinutes(minutes)
-    autoDeleteMinutes.value = minutes
-    window.dispatchEvent(new CustomEvent('auto-delete-minutes-changed', { detail: minutes }))
+    setAutoDeleteMinutes(minutes);
+    autoDeleteMinutes.value = minutes;
+    window.dispatchEvent(
+      new CustomEvent("auto-delete-minutes-changed", { detail: minutes }),
+    );
   }
-})
+});
 
 // If stored minutes change from another tab, update display
 watch(autoDeleteMinutes, (newMinutes) => {
-  syncDisplayFromMinutes(newMinutes)
-})
+  syncDisplayFromMinutes(newMinutes);
+});
 
 // Listen for storage events from other tabs
 const handleStorage = (e) => {
   if (e.key === AUTO_DELETE_MINUTES_KEY) {
-    autoDeleteMinutes.value = getAutoDeleteMinutes()
+    autoDeleteMinutes.value = getAutoDeleteMinutes();
   }
-}
-window.addEventListener('storage', handleStorage)
+};
+window.addEventListener("storage", handleStorage);
 
 onUnmounted(() => {
-  window.removeEventListener('storage', handleStorage)
-})
+  window.removeEventListener("storage", handleStorage);
+});
 
-const activeConfig = computed(() => getActiveAiConfig(form.value))
+const activeConfig = computed(() => getActiveAiConfig(form.value));
 const activeEndpointSignature = computed(
   () => `${activeConfig.value.source}:${activeConfig.value.requestBaseUrl}`,
-)
+);
 
 function getInitialStatus() {
-  const settings = loadAiSettings()
-  const active = getActiveAiConfig(settings)
+  const settings = loadAiSettings();
+  const active = getActiveAiConfig(settings);
 
   if (!active.requestBaseUrl) {
-    return 'Configure the active server URL or API base URL to load models.'
+    return "Configure the active server URL or API base URL to load models.";
   }
 
   if (settings.models.length) {
-    return `Saved ${settings.models.length} model option(s). Refresh to reload from the active profile.`
+    return "Saved " +
+      settings.models.length +
+      " model option(s). Refresh to reload from the active profile.";
   }
 
-  return 'Load models from the active profile.'
+  return "Load models from the active profile.";
 }
 
 function authHeaders() {
-  const headers = {}
+  const headers = {};
 
   if (activeConfig.value.apiKey) {
-    headers.Authorization = `Bearer ${activeConfig.value.apiKey}`
+    headers.Authorization = "Bearer " + activeConfig.value.apiKey;
   }
 
-  return headers
+  return headers;
 }
 
 async function requestJson(options = {}) {
-  const urls = buildModelsEndpointCandidates(activeConfig.value.requestBaseUrl)
-  let lastError = null
+  const urls = buildModelsEndpointCandidates(activeConfig.value.requestBaseUrl);
+  let lastError = null;
 
   for (const url of urls) {
     try {
-      const response = await fetch(url, options)
+      const response = await fetch(url, options);
       if (!response.ok) {
-        const raw = await response.text()
-        throw new Error(raw || `HTTP ${response.status}`)
+        const raw = await response.text();
+        throw new Error(raw || "HTTP " + response.status);
       }
 
-      return response.json()
+      return response.json();
     } catch (error) {
-      lastError = error
+      lastError = error;
     }
   }
 
-  throw lastError || new Error(`No model endpoint could be reached from ${activeConfig.value.requestBaseUrl}`)
+  throw (
+    lastError ||
+    new Error(
+      "No model endpoint could be reached from " +
+        activeConfig.value.requestBaseUrl,
+    )
+  );
 }
 
 function getPreferredSecondaryModel() {
   return (
-    form.value.models.find((model) => model.id !== form.value.primaryModel)?.id ||
+    form.value.models.find((model) => model.id !== form.value.primaryModel)
+      ?.id ||
     form.value.primaryModel ||
-    ''
-  )
+    ""
+  );
 }
 
 function syncModelSelection() {
   if (!form.value.models.length) {
-    form.value.primaryModel = ''
-    form.value.secondaryModel = ''
-    return
+    form.value.primaryModel = "";
+    form.value.secondaryModel = "";
+    return;
   }
 
-  const modelIds = new Set(form.value.models.map((model) => model.id))
+  const modelIds = new Set(form.value.models.map((model) => model.id));
 
   if (!modelIds.has(form.value.primaryModel)) {
-    form.value.primaryModel = form.value.models[0].id
+    form.value.primaryModel = form.value.models[0].id;
   }
 
   if (!modelIds.has(form.value.secondaryModel)) {
-    form.value.secondaryModel = getPreferredSecondaryModel()
+    form.value.secondaryModel = getPreferredSecondaryModel();
   }
 
   if (
@@ -183,62 +346,65 @@ function syncModelSelection() {
     form.value.models.length > 1 &&
     form.value.secondaryModel === form.value.primaryModel
   ) {
-    form.value.secondaryModel = getPreferredSecondaryModel()
+    form.value.secondaryModel = getPreferredSecondaryModel();
   }
 }
 
 async function loadModels() {
   if (!activeConfig.value.requestBaseUrl) {
-    connectionStatus.value = 'Configure the active server URL or API base URL first.'
-    return
+    connectionStatus.value =
+      "Configure the active server URL or API base URL first.";
+    return;
   }
 
-  modelsLoading.value = true
-  connectionStatus.value = 'Loading models...'
+  modelsLoading.value = true;
+  connectionStatus.value = "Loading models...";
 
   try {
     const payload = await requestJson({
-      method: 'GET',
+      method: "GET",
       headers: authHeaders(),
-    })
+    });
 
-    form.value.models = parseModels(payload)
-    syncModelSelection()
+    form.value.models = parseModels(payload);
+    syncModelSelection();
 
     if (!form.value.models.length) {
-      connectionStatus.value = 'Connected, but no models were returned.'
-      return
+      connectionStatus.value = "Connected, but no models were returned.";
+      return;
     }
 
-    connectionStatus.value = `Connected. Loaded ${form.value.models.length} model(s).`
+    connectionStatus.value = "Connected. Loaded " +
+      form.value.models.length +
+      " model(s).";
   } catch (error) {
-    connectionStatus.value = `Connection failed: ${error.message}`
-    form.value.models = []
-    form.value.primaryModel = ''
-    form.value.secondaryModel = ''
+    connectionStatus.value = "Connection failed: " + error.message;
+    form.value.models = [];
+    form.value.primaryModel = "";
+    form.value.secondaryModel = "";
   } finally {
-    modelsLoading.value = false
+    modelsLoading.value = false;
   }
 }
 
 watch(
   form,
   (value) => {
-    saveAiSettings(value)
+    saveAiSettings(value);
   },
   { deep: true },
-)
+);
 
 watch(activeEndpointSignature, (next, previous) => {
-  if (!previous || previous === next) return
+  if (!previous || previous === next) return;
 
-  form.value.models = []
-  form.value.primaryModel = ''
-  form.value.secondaryModel = ''
+  form.value.models = [];
+  form.value.primaryModel = "";
+  form.value.secondaryModel = "";
   connectionStatus.value = activeConfig.value.requestBaseUrl
-    ? 'Connection target changed. Load models for this profile.'
-    : 'Configure the active server URL or API base URL to load models.'
-})
+    ? "Connection target changed. Load models for this profile."
+    : "Configure the active server URL or API base URL to load models.";
+});
 
 watch(
   () => form.value.primaryModel,
@@ -248,122 +414,185 @@ watch(
       form.value.models.length > 1 &&
       form.value.secondaryModel === form.value.primaryModel
     ) {
-      form.value.secondaryModel = getPreferredSecondaryModel()
+      form.value.secondaryModel = getPreferredSecondaryModel();
     }
   },
-)
+);
 
 watch(
   () => form.value.useSecondModel,
   (enabled) => {
     if (enabled && !form.value.secondaryModel) {
-      form.value.secondaryModel = getPreferredSecondaryModel()
+      form.value.secondaryModel = getPreferredSecondaryModel();
     }
   },
-)
+);
 
 // ── Export ─────────────────────────────────────────────────────────────────
-const exportLoading = ref(false)
-const exportStatus = ref('')
+const exportLoading = ref(false);
+const exportStatus = ref("");
 
 // ── Authentication ───────────────────────────────────────────────────────────
-const authEmail = ref('')
-const authPassword = ref('')
-const authName = ref('')
-const authLoading = ref(false)
-const authStatus = ref('')
-const authMode = ref('login') // 'login' or 'register'
-const currentUser = ref(getUser())
+const authEmail = ref("");
+const authPassword = ref("");
+const authName = ref("");
+const authLoading = ref(false);
+const authStatus = ref("");
+const authMode = ref("login"); // 'login' or 'register'
+const currentUser = ref(getUser());
 
 async function handleAuth() {
-  authLoading.value = true
-  authStatus.value = ''
-  
+  authLoading.value = true;
+  authStatus.value = "";
+
   try {
-    if (authMode.value === 'register') {
+    if (authMode.value === "register") {
       const result = await register({
         email: authEmail.value,
         password: authPassword.value,
         name: authName.value,
-      })
+      });
       if (result.success) {
-        authStatus.value = 'Registration successful!'
-        currentUser.value = getUser()
-        authMode.value = 'login'
+        authStatus.value = "Registration successful!";
+        currentUser.value = getUser();
+        authMode.value = "login";
       } else {
-        authStatus.value = result.message || 'Registration failed'
+        authStatus.value = result.message || "Registration failed";
       }
     } else {
-      const result = await login(authEmail.value, authPassword.value)
+      const result = await login(authEmail.value, authPassword.value);
       if (result.success) {
-        authStatus.value = 'Login successful!'
-        currentUser.value = getUser()
+        authStatus.value = "Login successful!";
+        currentUser.value = getUser();
       } else {
-        authStatus.value = result.message || 'Login failed'
+        authStatus.value = result.message || "Login failed";
       }
     }
   } catch (error) {
-    authStatus.value = `Error: ${error.message}`
+    authStatus.value = "Error: " + error.message;
   } finally {
-    authLoading.value = false
+    authLoading.value = false;
   }
 }
 
 function handleLogout() {
-  logout()
-  currentUser.value = null
-  authStatus.value = 'Successfully logged out'
+  logout();
+  currentUser.value = null;
+  authStatus.value = "Successfully logged out";
 }
 
 function toggleAuthMode() {
-  authMode.value = authMode.value === 'login' ? 'register' : 'login'
-  authStatus.value = ''
+  authMode.value = authMode.value === "login" ? "register" : "login";
+  authStatus.value = "";
 }
 
+// ── Backend URL ──────────────────────────────────────────────────────────────
+const backendUrl = ref(loadBackendUrl());
+const backendPresetId = ref(getBackendPresetId(backendUrl.value));
+const customBackendUrl = ref(
+  backendPresetId.value === "custom" ? backendUrl.value : "",
+);
+
+function selectBackendPreset() {
+  const preset = BACKEND_PRESETS.find((p) => p.id === backendPresetId.value);
+  if (preset && preset.id === "custom") {
+    backendUrl.value = customBackendUrl.value || preset.url || "";
+  } else if (preset) {
+    backendUrl.value = preset.url;
+  }
+  saveBackendUrl(backendUrl.value);
+  updateApiBaseUrl(backendUrl.value);
+}
+
+watch(backendPresetId, () => {
+  selectBackendPreset();
+});
+
+watch(customBackendUrl, () => {
+  if (backendPresetId.value === "custom") {
+    backendUrl.value = customBackendUrl.value;
+    saveBackendUrl(backendUrl.value);
+    updateApiBaseUrl(backendUrl.value);
+  }
+});
+
+// ── Helpers ──────────────────────────────────────────────────────────────────
 function downloadFile(content, filename, mimeType) {
-  const blob = new Blob([content], { type: mimeType })
-  const url = URL.createObjectURL(blob)
-  const a = document.createElement('a')
-  a.href = url
-  a.download = filename
-  a.click()
-  URL.revokeObjectURL(url)
+  const blob = new Blob([content], { type: mimeType });
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement("a");
+  a.href = url;
+  a.download = filename;
+  a.click();
+  URL.revokeObjectURL(url);
 }
 
 async function exportAsJson() {
-  exportLoading.value = true
-  exportStatus.value = ''
+  exportLoading.value = true;
+  exportStatus.value = "";
   try {
-    const [todos, categories] = await Promise.all([getTodos(), getCategories()])
-    const payload = { exportedAt: new Date().toISOString(), todos, categories }
-    downloadFile(JSON.stringify(payload, null, 2), 'todos-export.json', 'application/json')
-    exportStatus.value = `Exported ${todos.length} todo(s).`
+    const [todos, categories] = await Promise.all([
+      getTodos(),
+      getCategories(),
+    ]);
+    const payload = { exportedAt: new Date().toISOString(), todos, categories };
+    downloadFile(
+      JSON.stringify(payload, null, 2),
+      "todos-export.json",
+      "application/json",
+    );
+    exportStatus.value = "Exported " + todos.length + " todo(s).";
   } catch (e) {
-    exportStatus.value = `Export failed: ${e.message}`
+    exportStatus.value = "Export failed: " + e.message;
   } finally {
-    exportLoading.value = false
+    exportLoading.value = false;
   }
 }
 
 async function exportAsCsv() {
-  exportLoading.value = true
-  exportStatus.value = ''
+  exportLoading.value = true;
+  exportStatus.value = "";
   try {
-    const [todos, categories] = await Promise.all([getTodos(), getCategories()])
-    const catMap = Object.fromEntries(categories.map((c) => [c.id, c.name]))
-    const headers = ['id', 'title', 'description', 'status', 'dueDate', 'dueTime', 'category', 'createdAt']
-    const escape = (v) => `"${String(v ?? '').replace(/"/g, '""')}"`
+    const [todos, categories] = await Promise.all([
+      getTodos(),
+      getCategories(),
+    ]);
+    const catMap = Object.fromEntries(categories.map((c) => [c.id, c.name]));
+    const headers = [
+      "id",
+      "title",
+      "description",
+      "status",
+      "dueDate",
+      "dueTime",
+      "category",
+      "createdAt",
+    ];
+    const escape = (v) => '"' + String(v ?? "").replace(/"/g, '""') + '"';
     const rows = todos.map((t) =>
-      [t.id, t.title, t.description, t.status, t.dueDate, t.dueTime, catMap[t.categoryId] ?? '', t.createdAt]
+      [
+        t.id,
+        t.title,
+        t.description,
+        t.status,
+        t.dueDate,
+        t.dueTime,
+        catMap[t.categoryId] ?? "",
+        t.createdAt,
+      ]
         .map(escape)
-        .join(','),
-    )
-    downloadFile([headers.join(','), ...rows].join('\n'), 'todos-export.csv', 'text/csv')
-    exportStatus.value = `Exported ${todos.length} todo(s).`
+        .join(","),
+    );
+    downloadFile(
+      [headers.join(","), ...rows].join("\n"),
+      "todos-export.csv",
+      "text/csv",
+    );
+    exportStatus.value = "Exported " + todos.length + " todo(s).";
   } catch (e) {
-    exportStatus.value = `Export failed: ${e.message}`
+    exportStatus.value = "Export failed: " + e.message;
   } finally {
-    exportLoading.value = false
+    exportLoading.value = false;
   }
 }
 </script>
@@ -376,6 +605,7 @@ async function exportAsCsv() {
     </header>
 
     <div class="settings-grid">
+      <!-- Server & Auth -->
       <article class="panel">
         <h2>Server & Auth</h2>
 
@@ -385,8 +615,10 @@ async function exportAsCsv() {
         </label>
 
         <p class="hint">
-          The default server starts at <code>{{ DEFAULT_AI_SERVER_URL }}</code>, but both server profiles can be
-          customized. You can also override the API base URL for providers like OpenAI or Google.
+          The default server starts at
+          <code>{{ DEFAULT_AI_SERVER_URL }}</code
+          >, but both server profiles can be customized. You can also override
+          the API base URL for providers like OpenAI or Google.
         </p>
 
         <div class="server-block" :class="{ active: form.useDefaultServer }">
@@ -424,7 +656,9 @@ async function exportAsCsv() {
         <div class="server-block" :class="{ active: !form.useDefaultServer }">
           <h3>Custom server</h3>
           <div class="row">
-            <label for="custom-server-url">Custom domain / URL (optional)</label>
+            <label for="custom-server-url"
+              >Custom domain / URL (optional)</label
+            >
             <input
               id="custom-server-url"
               v-model="form.customServerUrl"
@@ -455,7 +689,9 @@ async function exportAsCsv() {
 
         <p class="active-line">
           Active profile:
-          <strong>{{ form.useDefaultServer ? 'Default server' : 'Custom server' }}</strong>
+          <strong>{{
+            form.useDefaultServer ? "Default server" : "Custom server"
+          }}</strong>
           <span v-if="activeConfig.serverUrl">
             server <code>{{ activeConfig.serverUrl }}</code>
           </span>
@@ -466,7 +702,7 @@ async function exportAsCsv() {
 
         <div class="actions">
           <button :disabled="modelsLoading" @click="loadModels">
-            {{ modelsLoading ? 'Loading models...' : 'Load Models' }}
+            {{ modelsLoading ? "Loading models..." : "Load Models" }}
           </button>
           <button :disabled="modelsLoading" @click="loadModels">Refresh</button>
         </div>
@@ -474,82 +710,233 @@ async function exportAsCsv() {
         <p class="status">{{ connectionStatus }}</p>
       </article>
 
+      <!-- Model Setup -->
       <article class="panel">
         <h2>Model Setup</h2>
 
         <div class="row">
           <label for="primary-model">Primary model</label>
-          <select id="primary-model" v-model="form.primaryModel" :disabled="!form.models.length">
+          <select
+            id="primary-model"
+            v-model="form.primaryModel"
+            :disabled="!form.models.length"
+          >
             <option value="">
-              {{ form.models.length ? 'Select model from server' : 'Load models from the active server first' }}
+              {{
+                form.models.length
+                  ? "Select model from server"
+                  : "Load models from the active server first"
+              }}
             </option>
-            <option v-for="model in form.models" :key="model.id" :value="model.id">
+            <option
+              v-for="model in form.models"
+              :key="model.id"
+              :value="model.id"
+            >
               {{ model.label }}
             </option>
           </select>
         </div>
 
         <label class="toggle">
-          <input v-model="form.useSecondModel" type="checkbox" :disabled="!form.models.length" />
+          <input
+            v-model="form.useSecondModel"
+            type="checkbox"
+            :disabled="!form.models.length"
+          />
           <span>Combine with second model for higher accuracy</span>
         </label>
 
         <div v-if="form.useSecondModel" class="row">
           <label for="secondary-model">Secondary model</label>
-          <select id="secondary-model" v-model="form.secondaryModel" :disabled="!form.models.length">
+          <select
+            id="secondary-model"
+            v-model="form.secondaryModel"
+            :disabled="!form.models.length"
+          >
             <option value="">
-              {{ form.models.length ? 'Select second model' : 'Load models first' }}
+              {{
+                form.models.length ? "Select second model" : "Load models first"
+              }}
             </option>
-            <option v-for="model in form.models" :key="`secondary-${model.id}`" :value="model.id">
+            <option
+              v-for="model in form.models"
+              :key="'secondary-' + model.id"
+              :value="model.id"
+            >
               {{ model.label }}
             </option>
           </select>
         </div>
 
         <p class="hint">
-          Compatible endpoints are detected from the active connection target. OpenAI‑style and Ollama‑style model lists are both
-          supported. Use a base URL such as <code>https://api.openai.com/v1</code>, not the full endpoint path.
+          Compatible endpoints are detected from the active connection target.
+          OpenAI-style and Ollama-style model lists are both supported. Use a
+          base URL such as <code>https://api.openai.com/v1</code>, not the full
+          endpoint path.
         </p>
       </article>
 
+      <!-- Appearance -->
       <article class="panel">
         <h2>Appearance</h2>
-        <p class="hint">Choose a theme. It is saved automatically in this browser.</p>
+        <p class="hint">
+          Choose a theme. Hover a swatch to download it as a CSS file for the
+          marketplace.
+        </p>
 
         <div v-for="group in themeGroups" :key="group" class="theme-group">
           <h3 class="group-label">{{ group }}</h3>
           <div class="theme-grid">
-            <button
+            <div
               v-for="theme in themesByGroup[group]"
               :key="theme.id"
-              class="theme-swatch"
-              :class="{ active: currentTheme === theme.id }"
-              :title="theme.name"
-              @click="selectTheme(theme.id)"
+              class="theme-swatch-wrap"
             >
-              <span class="swatch-colors">
-                <span class="swatch-dot" :style="{ background: theme.preview[0] }" />
-                <span class="swatch-dot" :style="{ background: theme.preview[1] }" />
-                <span class="swatch-dot" :style="{ background: theme.preview[2] }" />
-              </span>
-              <span class="swatch-label">{{ theme.name }}</span>
+              <button
+                class="theme-swatch"
+                :class="{ active: currentTheme === theme.id }"
+                :title="theme.name"
+                @click="selectTheme(theme.id)"
+              >
+                <span class="swatch-colors">
+                  <span
+                    class="swatch-dot"
+                    :style="{ background: theme.preview[0] }"
+                  />
+                  <span
+                    class="swatch-dot"
+                    :style="{ background: theme.preview[1] }"
+                  />
+                  <span
+                    class="swatch-dot"
+                    :style="{ background: theme.preview[2] }"
+                  />
+                </span>
+                <span class="swatch-label">{{ theme.name }}</span>
+              </button>
+              <div class="swatch-actions">
+                <button
+                  class="icon-btn"
+                  title="Download theme as CSS"
+                  @click.stop="downloadTheme(theme)"
+                >
+                  &darr;
+                </button>
+                <button
+                  v-if="theme.group === 'Custom'"
+                  class="icon-btn danger"
+                  title="Delete theme"
+                  @click.stop="deleteCustomTheme(theme.id)"
+                >
+                  &Cross;
+                </button>
+                <button
+                  v-if="theme.group === 'External'"
+                  class="icon-btn danger"
+                  title="Remove theme"
+                  @click.stop="deleteExternalTheme(theme.id)"
+                >
+                  &Cross;
+                </button>
+              </div>
+            </div>
+            <button
+              v-if="group === 'Custom'"
+              class="theme-swatch add-swatch"
+              @click="openThemeCreator"
+            >
+              <span class="add-icon">+</span>
+              <span class="swatch-label">New</span>
+            </button>
+          </div>
+        </div>
+
+        <!-- Custom theme creator -->
+        <div v-if="showThemeCreator" class="theme-creator">
+          <h3>Create Custom Theme</h3>
+
+          <div class="row">
+            <label>Name</label>
+            <input
+              v-model="themeForm.name"
+              type="text"
+              placeholder="My Theme"
+            />
+          </div>
+
+          <div class="row">
+            <label>Start from</label>
+            <select v-model="themeForm.baseId" @change="loadBaseTheme">
+              <option v-for="t in allThemesList" :key="t.id" :value="t.id">
+                {{ t.name }}
+              </option>
+            </select>
+          </div>
+
+          <div v-for="vg in CSS_VAR_GROUPS" :key="vg.label" class="var-group">
+            <h4 class="var-group-label">{{ vg.label }}</h4>
+            <div class="color-grid">
+              <label v-for="v in vg.vars" :key="v" class="color-row">
+                <input type="color" v-model="themeForm.vars[v]" />
+                <span>{{ CSS_VAR_LABELS[v] }}</span>
+              </label>
+            </div>
+          </div>
+
+          <div class="actions creator-actions">
+            <button @click="saveCustomTheme">Save Theme</button>
+            <button class="btn-ghost" @click="showThemeCreator = false">
+              Cancel
+            </button>
+          </div>
+        </div>
+
+        <!-- Wallpaper -->
+        <div class="wallpaper-section">
+          <h3>Wallpaper</h3>
+          <p class="hint">
+            The wallpaper is embedded as base64 in downloaded theme CSS files,
+            keeping them self-contained for marketplace uploads.
+          </p>
+          <div v-if="wallpaperDataUrl" class="wallpaper-preview">
+            <img :src="wallpaperDataUrl" alt="Wallpaper preview" />
+          </div>
+          <p v-if="wallpaperError" class="status warn">{{ wallpaperError }}</p>
+          <div class="actions">
+            <label class="btn-upload">
+              {{ wallpaperDataUrl ? "Change Wallpaper" : "Upload Wallpaper" }}
+              <input
+                type="file"
+                accept="image/*"
+                @change="handleWallpaperUpload"
+              />
+            </label>
+            <button v-if="wallpaperDataUrl" @click="removeWallpaper">
+              Remove
             </button>
           </div>
         </div>
       </article>
 
+      <!-- Export -->
       <article class="panel">
         <h2>Export</h2>
         <p class="hint">Download all your todos and categories as a file.</p>
         <div class="actions">
-          <button :disabled="exportLoading" @click="exportAsJson">Export as JSON</button>
-          <button :disabled="exportLoading" @click="exportAsCsv">Export as CSV</button>
+          <button :disabled="exportLoading" @click="exportAsJson">
+            Export as JSON
+          </button>
+          <button :disabled="exportLoading" @click="exportAsCsv">
+            Export as CSV
+          </button>
         </div>
         <p v-if="exportStatus" class="status">{{ exportStatus }}</p>
       </article>
 
+      <!-- Auto-Deletion -->
       <article class="panel">
-        <h2>Auto‑Deletion</h2>
+        <h2>Auto-Deletion</h2>
         <div class="row">
           <label>Delete completed todos after</label>
           <div class="unit-input-group">
@@ -568,23 +955,70 @@ async function exportAsCsv() {
             </select>
           </div>
           <p class="hint">
-            0 means immediate deletion. The countdown will show the remaining time in the largest units.
+            0 means immediate deletion. The countdown will show the remaining
+            time in the largest units.
           </p>
         </div>
       </article>
 
+      <!-- Backend URL Selection -->
+      <article class="panel">
+        <h2>Backend</h2>
+        <p class="hint">
+          Select which backend server the app should connect to. When no backend
+          is reachable, the app falls back to offline mode automatically.
+        </p>
+
+        <div class="row">
+          <label for="backend-preset">Backend type</label>
+          <select id="backend-preset" v-model="backendPresetId">
+            <option
+              v-for="preset in BACKEND_PRESETS"
+              :key="preset.id"
+              :value="preset.id"
+            >
+              {{ preset.label }}
+            </option>
+          </select>
+        </div>
+
+        <div v-if="backendPresetId === 'custom'" class="row">
+          <label for="custom-backend-url">Custom backend URL</label>
+          <input
+            id="custom-backend-url"
+            v-model="customBackendUrl"
+            type="url"
+            placeholder="http://localhost:8080/api/v1"
+          />
+        </div>
+
+        <p class="status">
+          Active URL: <code>{{ backendUrl || "(none)" }}</code>
+        </p>
+        <p class="hint">
+          Changes take effect immediately. The connection test happens
+          automatically on the next API call.
+        </p>
+      </article>
+
+      <!-- Backend Authentication -->
       <article class="panel">
         <h2>Backend Authentication</h2>
-        <p class="hint">Login to sync your todos with the backend server.</p>
-        
+        <p class="hint">
+          Login to sync your todos with the backend server.
+        </p>
+
         <div v-if="currentUser" class="user-info">
-          <p><strong>Logged in as:</strong> {{ currentUser.name || currentUser.email }}</p>
+          <p>
+            <strong>Logged in as:</strong>
+            {{ currentUser.name || currentUser.email }}
+          </p>
           <p><strong>Email:</strong> {{ currentUser.email }}</p>
           <div class="actions">
             <button @click="handleLogout">Logout</button>
           </div>
         </div>
-        
+
         <div v-else class="auth-form">
           <div class="row">
             <label for="auth-email">Email</label>
@@ -595,7 +1029,7 @@ async function exportAsCsv() {
               placeholder="user@example.com"
             />
           </div>
-          
+
           <div class="row">
             <label for="auth-password">Password</label>
             <input
@@ -605,7 +1039,7 @@ async function exportAsCsv() {
               placeholder="Your password"
             />
           </div>
-          
+
           <div v-if="authMode === 'register'" class="row">
             <label for="auth-name">Name</label>
             <input
@@ -615,16 +1049,26 @@ async function exportAsCsv() {
               placeholder="Your name"
             />
           </div>
-          
+
           <div class="actions">
             <button :disabled="authLoading" @click="handleAuth">
-              {{ authLoading ? 'Loading...' : (authMode === 'login' ? 'Login' : 'Register') }}
+              {{
+                authLoading
+                  ? "Loading..."
+                  : authMode === "login"
+                    ? "Login"
+                    : "Register"
+              }}
             </button>
             <button @click="toggleAuthMode">
-              {{ authMode === 'login' ? 'Create new account' : 'Back to login' }}
+              {{
+                authMode === "login"
+                  ? "Create new account"
+                  : "Back to login"
+              }}
             </button>
           </div>
-          
+
           <p v-if="authStatus" class="status">{{ authStatus }}</p>
         </div>
       </article>
@@ -755,11 +1199,7 @@ code {
   flex: 1;
 }
 
-/* ── Appearance / theme swatches ── */
-.appearance-panel {
-  grid-column: 1 / -1;
-}
-
+/* Theme swatches */
 .theme-group {
   margin-bottom: 16px;
 }
@@ -779,6 +1219,45 @@ code {
   gap: 10px;
 }
 
+.theme-swatch-wrap {
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 4px;
+}
+
+.theme-swatch-wrap:hover .swatch-actions {
+  opacity: 1;
+}
+
+.swatch-actions {
+  display: flex;
+  gap: 4px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+
+.icon-btn {
+  border: 1px solid var(--border);
+  background: var(--surface);
+  color: var(--text-muted);
+  padding: 2px 7px;
+  font-size: 12px;
+  cursor: pointer;
+  border-radius: 4px;
+  line-height: 1.4;
+}
+
+.icon-btn:hover {
+  background: var(--accent-soft);
+  color: var(--text);
+}
+
+.icon-btn.danger:hover {
+  background: #ffd5d5;
+  color: #b00;
+}
+
 .theme-swatch {
   display: flex;
   flex-direction: column;
@@ -789,7 +1268,9 @@ code {
   border-radius: 12px;
   padding: 8px 10px;
   cursor: pointer;
-  transition: border-color 0.2s, transform 0.1s;
+  transition:
+    border-color 0.2s,
+    transform 0.1s;
   min-width: 72px;
 }
 
@@ -802,6 +1283,16 @@ code {
   border-color: var(--accent);
   outline: 2px solid var(--accent);
   outline-offset: 2px;
+}
+
+.add-swatch {
+  border-style: dashed;
+}
+
+.add-icon {
+  font-size: 22px;
+  line-height: 1;
+  color: var(--text-muted);
 }
 
 .swatch-colors {
@@ -823,10 +1314,114 @@ code {
   white-space: nowrap;
 }
 
-@media (max-width: 960px) {
-  .settings-grid {
-    grid-template-columns: 1fr;
-  }
+/* Custom theme creator */
+.theme-creator {
+  margin-top: 16px;
+  border: 1px solid var(--border);
+  padding: 16px;
+  background: var(--surface-muted);
+}
+
+.theme-creator h3 {
+  margin: 0 0 14px;
+  font-size: 15px;
+}
+
+.var-group {
+  margin-bottom: 14px;
+}
+
+.var-group-label {
+  font-size: 12px;
+  font-weight: 600;
+  text-transform: uppercase;
+  letter-spacing: 0.06em;
+  color: var(--text-muted);
+  margin: 0 0 8px;
+}
+
+.color-grid {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 8px 16px;
+}
+
+.color-row {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.color-row input[type="color"] {
+  width: 28px;
+  height: 28px;
+  padding: 2px;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  cursor: pointer;
+  background: none;
+}
+
+.creator-actions {
+  margin-top: 16px;
+  margin-bottom: 0;
+}
+
+.btn-ghost {
+  background: transparent !important;
+  border-color: var(--border) !important;
+  color: var(--text-muted) !important;
+}
+
+/* Wallpaper */
+.wallpaper-section {
+  margin-top: 20px;
+  border-top: 1px solid var(--border);
+  padding-top: 16px;
+}
+
+.wallpaper-section h3 {
+  margin: 0 0 8px;
+  font-size: 15px;
+}
+
+.wallpaper-preview {
+  width: 100%;
+  overflow: hidden;
+  border: 1px solid var(--border);
+  border-radius: 4px;
+  margin-bottom: 10px;
+}
+
+.wallpaper-preview img {
+  width: 100%;
+  height: 120px;
+  object-fit: cover;
+  display: block;
+}
+
+.btn-upload {
+  display: inline-block;
+  border: 1px solid var(--input-border);
+  background: var(--input-bg);
+  color: var(--text);
+  padding: 9px 10px;
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.btn-upload:hover {
+  border-color: var(--accent);
+}
+
+.btn-upload input[type="file"] {
+  display: none;
+}
+
+.warn {
+  color: #b06000 !important;
 }
 
 /* Authentication styles */
@@ -843,5 +1438,11 @@ code {
 
 .auth-form {
   padding: 12px 0;
+}
+
+@media (max-width: 960px) {
+  .settings-grid {
+    grid-template-columns: 1fr;
+  }
 }
 </style>
