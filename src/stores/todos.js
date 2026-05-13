@@ -202,8 +202,9 @@ export const useTodoStore = defineStore('todos', () => {
 	// Online/Offline status management
 	const checkBackendConnection = async () => {
 		try {
-			// Try to fetch categories as a simple health check
-			await api.get('/categories', { timeout: 3000 })
+			// Try the root endpoint or marketplace as a simple health check
+			// (categories/todos require auth, so we hit a public endpoint)
+			await api.get('/marketplace/themes', { timeout: 3000 })
 			return true
 		} catch (error) {
 			return false
