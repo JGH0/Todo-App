@@ -48,13 +48,19 @@ const selectedDayDate = ref('')
 // Normalize todos: ensure each has a `categories` array (strings)
 const normalizedTodos = computed(() => {
 	return rawTodos.value.map(todo => {
+		// Already has categories array from backend conversion
 		if (todo.categories && Array.isArray(todo.categories)) {
 			return { ...todo, categories: [...todo.categories] }
 		}
-		if (todo.categoryId) {
-			const cat = categoriesList.value.find(c => c.id == todo.categoryId)
-			if (cat) {
-				return { ...todo, categories: [cat.name] }
+		// Fallback: resolve from categoryIds (comma-separated UUIDs)
+		if (todo.categoryIds) {
+			const ids = String(todo.categoryIds).split(',').map(id => id.trim()).filter(Boolean)
+			const names = ids
+				.map(id => categoriesList.value.find(c => String(c.id) === id))
+				.filter(Boolean)
+				.map(c => c.name)
+			if (names.length) {
+				return { ...todo, categories: names }
 			}
 		}
 		return { ...todo, categories: [] }

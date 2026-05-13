@@ -19,7 +19,7 @@ function convertArrayFromBackend(items) {
 		if (converted.status) {
 			converted.status = mapStatusToFrontend(converted.status)
 		}
-		// Convert category_names from GROUP_CONCAT string to categories array
+		// Convert category_names from GROUP_CONCAT string to categories array of strings
 		if (
 			converted.category_names &&
 			typeof converted.category_names === 'string'
@@ -27,7 +27,7 @@ function convertArrayFromBackend(items) {
 			converted.categories = converted.category_names
 				.split(',')
 				.filter(Boolean)
-				.map((name) => ({ name: name.trim() }))
+				.map((name) => name.trim())
 		}
 		return converted
 	})
