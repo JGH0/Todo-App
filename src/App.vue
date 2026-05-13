@@ -1,9 +1,122 @@
 <script setup>
 import { RouterLink, RouterView } from 'vue-router'
+import { useTodoStore } from '@/stores/todos'
+import ConflictResolutionModal from '@/components/ConflictResolutionModal.vue'
+import { onMounted, ref, computed } from 'vue'
+import { getUser, logout, isAuthenticated, login, register } from '@/services/authService'
+
+const todoStore = useTodoStore()
+const currentUser = ref(getUser())
+const showLoginModal = ref(false)
+const loginEmail = ref('')
+const loginPassword = ref('')
+const loginLoading = ref(false)
+const loginError = ref('')
+const loginMode = ref('login') // 'login' or 'register'
+const registerName = ref('')
+
+const isAuth = computed(() => isAuthenticated())
+
+onMounted(() => {
+	todoStore.initializeNetworkListeners()
+})
+
+async function handleLogin() {
+	loginLoading.value = true
+	loginError.value = ''
+	
+	try {
+		if (loginMode.value === 'register') {
+			const result = await register({
+				email: loginEmail.value,
+				password: loginPassword.value,
+				name: registerName.value,
+			})
+			if (result.success) {
+				currentUser.value = getUser()
+				showLoginModal.value = false
+				loginMode.value = 'login'
+			} else {
+				loginError.value = result.message || 'Registration failed'
+			}
+		} else {
+			const result = await login(loginEmail.value, loginPassword.value)
+			if (result.success) {
+				currentUser.value = getUser()
+				showLoginModal.value = false
+			} else {
+				loginError.value = result.message || 'Login failed'
+			}
+		}
+	} catch (error) {
+		loginError.value = `Error: ${error.message}`
+	} finally {
+		loginLoading.value = false
+	}
+}
+
+function handleLogout() {
+	logout()
+	currentUser.value = null
+}
+
+function toggleLoginMode() {
+	loginMode.value = loginMode.value === 'login' ? 'register' : 'login'
+	loginError.value = ''
+}
 </script>
 
 <template>
 	<div class="app-shell">
+		<!-- Online/Offline Status Indicator -->
+		<div class="status-indicator" :class="{ online: todoStore.isOnline, offline: !todoStore.isOnline }">
+			<span v-if="todoStore.isSyncing" class="syncing">⏳ Syncing...</span>
+			<span v-else-if="todoStore.isOnline" class="online">● Online</span>
+			<span v-else class="offline">● Offline</span>
+		</div>
+
+		<!-- Conflict Resolution Modal -->
+		<ConflictResolutionModal
+			:show="todoStore.showConflictModal"
+			:conflicts="todoStore.currentConflicts"
+			@close="todoStore.showConflictModal = false"
+			@resolve="todoStore.resolveConflicts"
+		/>
+
+		<!-- Login Modal -->
+		<div v-if="showLoginModal" class="modal-overlay" @click.self="showLoginModal = false">
+			<div class="modal-content">
+				<h2>{{ loginMode === 'login' ? 'Login' : 'Register' }}</h2>
+				
+				<div v-if="loginMode === 'register'" class="form-group">
+					<label for="register-name">Name</label>
+					<input id="register-name" v-model="registerName" type="text" placeholder="Your name" />
+				</div>
+				
+				<div class="form-group">
+					<label for="login-email">Email</label>
+					<input id="login-email" v-model="loginEmail" type="email" placeholder="user@example.com" />
+				</div>
+				
+				<div class="form-group">
+					<label for="login-password">Password</label>
+					<input id="login-password" v-model="loginPassword" type="password" placeholder="Your password" />
+				</div>
+				
+				<p v-if="loginError" class="error">{{ loginError }}</p>
+				
+				<div class="modal-actions">
+					<button @click="handleLogin" :disabled="loginLoading">
+						{{ loginLoading ? 'Loading...' : (loginMode === 'login' ? 'Login' : 'Register') }}
+					</button>
+					<button @click="toggleLoginMode">
+						{{ loginMode === 'login' ? 'Create new account' : 'Back to login' }}
+					</button>
+					<button @click="showLoginModal = false" class="secondary">Cancel</button>
+				</div>
+			</div>
+		</div>
+
 		<!-- Mobile Header -->
 		<header class="mobile-header">
 			<button class="hamburger" @click="sidebarOpen = true">
@@ -25,7 +138,22 @@ import { RouterLink, RouterView } from 'vue-router'
 			:class="{ open: sidebarOpen }"
 			@click.stop
 		>
-			<div class="user">User XY</div>
+			<div class="user-section">
+				<div v-if="currentUser" class="user-info">
+					<img v-if="currentUser.avatar_url" :src="currentUser.avatar_url" class="user-avatar" alt="Avatar" />
+					<div v-else class="user-avatar-placeholder">{{ currentUser.name ? currentUser.name.charAt(0).toUpperCase() : 'U' }}</div>
+					<div class="user-details">
+						<div class="user-name">{{ currentUser.name || currentUser.email }}</div>
+					</div>
+				</div>
+				<div v-else class="user-info">
+					<div class="user-avatar-placeholder">?</div>
+					<div class="user-details">
+						<div class="user-name">Not logged in</div>
+						<button @click="showLoginModal = true" class="login-btn">Login</button>
+					</div>
+				</div>
+			</div>
 
 			<nav class="top-links">
 				<button class="nav-btn" @click="setView('addTask')">+ Add a Task</button>
@@ -162,6 +290,33 @@ export default {
 </script>
 
 <style scoped>
+/* Status Indicator */
+.status-indicator {
+	position: fixed;
+	top: 10px;
+	right: 10px;
+	padding: 8px 16px;
+	border-radius: 20px;
+	font-size: 14px;
+	font-weight: 600;
+	z-index: 1000;
+	background: var(--surface);
+	border: 1px solid var(--border);
+	box-shadow: 0 2px 8px rgba(0, 0, 0, 0.1);
+}
+
+.status-indicator.online {
+	color: #10b981;
+}
+
+.status-indicator.offline {
+	color: #ef4444;
+}
+
+.status-indicator.syncing {
+	color: #f59e0b;
+}
+
 /* Layout */
 .app-shell {
 	min-height: 100vh;
@@ -179,6 +334,71 @@ export default {
 	padding: 20px 16px;
 	z-index: 20;
 	transition: background 0.3s, border-color 0.3s;
+}
+
+/* User Section */
+.user-section {
+	margin-bottom: 18px;
+}
+
+.user-info {
+	display: flex;
+	align-items: center;
+	gap: 12px;
+	padding: 12px;
+	background: var(--surface-muted);
+	border-radius: 8px;
+}
+
+.user-avatar {
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
+	object-fit: cover;
+}
+
+.user-avatar-placeholder {
+	width: 40px;
+	height: 40px;
+	border-radius: 50%;
+	background: var(--accent);
+	color: white;
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	font-size: 18px;
+	font-weight: 600;
+}
+
+.user-details {
+	flex: 1;
+	min-width: 0;
+}
+
+.user-name {
+	font-size: 14px;
+	font-weight: 600;
+	color: var(--sidebar-text);
+	white-space: nowrap;
+	overflow: hidden;
+	text-overflow: ellipsis;
+}
+
+.login-btn,
+.logout-btn {
+	font-size: 12px;
+	padding: 4px 8px;
+	background: var(--accent);
+	color: white;
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+	margin-top: 4px;
+}
+
+.login-btn:hover,
+.logout-btn:hover {
+	opacity: 0.9;
 }
 
 .user {
@@ -297,5 +517,101 @@ export default {
 	.content {
 		padding-top: 16px;
 	}
+}
+
+/* Login Modal */
+.modal-overlay {
+	position: fixed;
+	top: 0;
+	left: 0;
+	right: 0;
+	bottom: 0;
+	background: rgba(0, 0, 0, 0.5);
+	display: flex;
+	align-items: center;
+	justify-content: center;
+	z-index: 2000;
+}
+
+.modal-content {
+	background: var(--surface);
+	padding: 2rem;
+	border-radius: 8px;
+	max-width: 400px;
+	width: 90%;
+	border: 1px solid var(--border);
+}
+
+.modal-content h2 {
+	margin-top: 0;
+	margin-bottom: 1.5rem;
+	color: var(--text);
+}
+
+.form-group {
+	margin-bottom: 1rem;
+}
+
+.form-group label {
+	display: block;
+	margin-bottom: 0.5rem;
+	color: var(--text);
+	font-weight: 500;
+}
+
+.form-group input {
+	width: 100%;
+	padding: 0.75rem;
+	border: 1px solid var(--input-border);
+	border-radius: 4px;
+	background: var(--input-bg);
+	color: var(--text);
+	font-size: 14px;
+}
+
+.error {
+	color: #ef4444;
+	margin: 1rem 0;
+	font-size: 14px;
+}
+
+.modal-actions {
+	display: flex;
+	flex-direction: column;
+	gap: 0.5rem;
+	margin-top: 1.5rem;
+}
+
+.modal-actions button {
+	padding: 0.75rem;
+	border: none;
+	border-radius: 4px;
+	cursor: pointer;
+	font-size: 14px;
+	font-weight: 500;
+}
+
+.modal-actions button:not(.secondary) {
+	background: var(--accent);
+	color: white;
+}
+
+.modal-actions button:not(.secondary):hover {
+	opacity: 0.9;
+}
+
+.modal-actions button.secondary {
+	background: transparent;
+	border: 1px solid var(--border);
+	color: var(--text);
+}
+
+.modal-actions button.secondary:hover {
+	background: var(--surface-muted);
+}
+
+.modal-actions button:disabled {
+	opacity: 0.5;
+	cursor: not-allowed;
 }
 </style>

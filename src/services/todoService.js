@@ -1,31 +1,42 @@
-import api from '@/services/api'
+import {
+	getTodos as apiGetTodos,
+	createTodo as apiCreateTodo,
+	updateTodo as apiUpdateTodo,
+	deleteTodo as apiDeleteTodo,
+} from './apiService'
 
 export const getTodos = async () => {
-	const { data } = await api.get('/todos')
-	return data.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+	const data = await apiGetTodos()
+	return data.sort((a, b) => {
+		const dateA = new Date(a.created_at || a.createdAt)
+		const dateB = new Date(b.created_at || b.createdAt)
+		return dateB - dateA
+	})
 }
 
 export const getTodo = async (id) => {
-	const { data } = await api.get(`/todos/${id}`)
-	return data
+	const todos = await getTodos()
+	return todos.find((todo) => todo.id === id)
 }
 
 export const getTodosByCategory = async (categoryId) => {
-	const { data } = await api.get('/todos')
-	const filtered = categoryId ? data.filter(todo => todo.categoryId == categoryId) : data
-	return filtered.sort((a, b) => new Date(b.createdAt) - new Date(a.createdAt))
+	const data = await getTodos()
+	const filtered = categoryId ? data.filter((todo) => todo.categoryId == categoryId) : data
+	return filtered.sort((a, b) => {
+		const dateA = new Date(a.created_at || a.createdAt)
+		const dateB = new Date(b.created_at || b.createdAt)
+		return dateB - dateA
+	})
 }
 
 export const createTodo = async (todo) => {
-	const { data } = await api.post('/todos', todo)
-	return data
+	return apiCreateTodo(todo)
 }
 
 export const updateTodo = async (id, todo) => {
-	const { data } = await api.put(`/todos/${id}`, todo)
-	return data
+	return apiUpdateTodo(id, todo)
 }
 
 export const deleteTodo = async (id) => {
-	await api.delete(`/todos/${id}`)
+	return apiDeleteTodo(id)
 }

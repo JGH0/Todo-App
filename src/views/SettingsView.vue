@@ -12,6 +12,7 @@ import { getAutoDeleteMinutes, setAutoDeleteMinutes, AUTO_DELETE_MINUTES_KEY } f
 import { themes, loadTheme, applyTheme } from '@/utils/themeSettings'
 import { getTodos } from '@/services/todoService'
 import { getCategories } from '@/services/categoryService'
+import { login, register, logout, getUser, isAuthenticated } from '@/services/authService'
 
 // ── Theme ──────────────────────────────────────────────────────────────────
 const currentTheme = ref(loadTheme())
@@ -265,6 +266,60 @@ watch(
 const exportLoading = ref(false)
 const exportStatus = ref('')
 
+// ── Authentication ───────────────────────────────────────────────────────────
+const authEmail = ref('')
+const authPassword = ref('')
+const authName = ref('')
+const authLoading = ref(false)
+const authStatus = ref('')
+const authMode = ref('login') // 'login' or 'register'
+const currentUser = ref(getUser())
+
+async function handleAuth() {
+  authLoading.value = true
+  authStatus.value = ''
+  
+  try {
+    if (authMode.value === 'register') {
+      const result = await register({
+        email: authEmail.value,
+        password: authPassword.value,
+        name: authName.value,
+      })
+      if (result.success) {
+        authStatus.value = 'Registration successful!'
+        currentUser.value = getUser()
+        authMode.value = 'login'
+      } else {
+        authStatus.value = result.message || 'Registration failed'
+      }
+    } else {
+      const result = await login(authEmail.value, authPassword.value)
+      if (result.success) {
+        authStatus.value = 'Login successful!'
+        currentUser.value = getUser()
+      } else {
+        authStatus.value = result.message || 'Login failed'
+      }
+    }
+  } catch (error) {
+    authStatus.value = `Error: ${error.message}`
+  } finally {
+    authLoading.value = false
+  }
+}
+
+function handleLogout() {
+  logout()
+  currentUser.value = null
+  authStatus.value = 'Successfully logged out'
+}
+
+function toggleAuthMode() {
+  authMode.value = authMode.value === 'login' ? 'register' : 'login'
+  authStatus.value = ''
+}
+
 function downloadFile(content, filename, mimeType) {
   const blob = new Blob([content], { type: mimeType })
   const url = URL.createObjectURL(blob)
@@ -517,6 +572,62 @@ async function exportAsCsv() {
           </p>
         </div>
       </article>
+
+      <article class="panel">
+        <h2>Backend Authentication</h2>
+        <p class="hint">Login to sync your todos with the backend server.</p>
+        
+        <div v-if="currentUser" class="user-info">
+          <p><strong>Logged in as:</strong> {{ currentUser.name || currentUser.email }}</p>
+          <p><strong>Email:</strong> {{ currentUser.email }}</p>
+          <div class="actions">
+            <button @click="handleLogout">Logout</button>
+          </div>
+        </div>
+        
+        <div v-else class="auth-form">
+          <div class="row">
+            <label for="auth-email">Email</label>
+            <input
+              id="auth-email"
+              v-model="authEmail"
+              type="email"
+              placeholder="user@example.com"
+            />
+          </div>
+          
+          <div class="row">
+            <label for="auth-password">Password</label>
+            <input
+              id="auth-password"
+              v-model="authPassword"
+              type="password"
+              placeholder="Your password"
+            />
+          </div>
+          
+          <div v-if="authMode === 'register'" class="row">
+            <label for="auth-name">Name</label>
+            <input
+              id="auth-name"
+              v-model="authName"
+              type="text"
+              placeholder="Your name"
+            />
+          </div>
+          
+          <div class="actions">
+            <button :disabled="authLoading" @click="handleAuth">
+              {{ authLoading ? 'Loading...' : (authMode === 'login' ? 'Login' : 'Register') }}
+            </button>
+            <button @click="toggleAuthMode">
+              {{ authMode === 'login' ? 'Create new account' : 'Back to login' }}
+            </button>
+          </div>
+          
+          <p v-if="authStatus" class="status">{{ authStatus }}</p>
+        </div>
+      </article>
     </div>
   </section>
 </template>
@@ -716,5 +827,21 @@ code {
   .settings-grid {
     grid-template-columns: 1fr;
   }
+}
+
+/* Authentication styles */
+.user-info {
+  padding: 12px;
+  background: var(--surface-muted);
+  border-radius: 4px;
+  margin-bottom: 12px;
+}
+
+.user-info p {
+  margin: 6px 0;
+}
+
+.auth-form {
+  padding: 12px 0;
 }
 </style>

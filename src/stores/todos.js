@@ -14,6 +14,9 @@ import {
 	getTodosByCategory,
 	updateTodo as updateTodoRequest,
 } from '@/services/todoService'
+import { syncService } from '@/services/syncService'
+import { offlineStorage } from '@/services/offlineStorage'
+import api from '@/services/api'
 
 export const useTodoStore = defineStore('todos', () => {
 	const todos = ref([])
@@ -22,6 +25,11 @@ export const useTodoStore = defineStore('todos', () => {
 	const error = ref('')
 	const activeCategoryId = ref('')
 	const hasLoaded = ref(false)
+	const isOnline = ref(navigator.onLine)
+	const isSyncing = ref(false)
+	const showConflictModal = ref(false)
+	const currentConflicts = ref([])
+	const conflictDataType = ref('')
 
 	const todoCount = computed(() => todos.value.length)
 	const categoryOptions = computed(() => categories.value)
@@ -191,6 +199,97 @@ export const useTodoStore = defineStore('todos', () => {
 	const getTodosByProject = (projectId) =>
 		todos.value.filter((todo) => todo.projectId === projectId)
 
+	// Online/Offline status management
+	const checkBackendConnection = async () => {
+		try {
+			// Try to fetch categories as a simple health check
+			await api.get('/categories', { timeout: 3000 })
+			return true
+		} catch (error) {
+			return false
+		}
+	}
+
+	const updateOnlineStatus = async (online) => {
+		// Check if backend is actually reachable
+		const backendReachable = online ? await checkBackendConnection() : false
+		isOnline.value = backendReachable
+		syncService.setOnlineStatus(backendReachable)
+
+		if (backendReachable && hasLoaded.value) {
+			// Trigger sync when coming back online
+			performSync()
+		}
+	}
+
+	// Sync functionality
+	const performSync = async () => {
+		if (!isOnline.value || isSyncing.value) {
+			return
+		}
+
+		try {
+			isSyncing.value = true
+			setError('')
+
+			// Set up conflict callback
+			syncService.setConflictCallback(async (conflicts, dataType) => {
+				currentConflicts.value = conflicts
+				conflictDataType.value = dataType
+				showConflictModal.value = true
+
+				// Wait for user resolution
+				return new Promise((resolve) => {
+					const handleResolution = (event) => {
+						window.removeEventListener('conflict-resolved', handleResolution)
+						resolve(event.detail)
+					}
+					window.addEventListener('conflict-resolved', handleResolution)
+				})
+			})
+
+			const result = await syncService.performFullSync()
+
+			if (result.success) {
+				todos.value = result.todos
+				categories.value = result.categories
+			}
+		} catch (syncError) {
+			setError(syncError instanceof Error ? syncError.message : 'Synchronisierung fehlgeschlagen.')
+		} finally {
+			isSyncing.value = false
+		}
+	}
+
+	// Handle conflict resolution
+	const resolveConflicts = (resolution) => {
+		showConflictModal.value = false
+		window.dispatchEvent(
+			new CustomEvent('conflict-resolved', {
+				detail: resolution,
+			}),
+		)
+	}
+
+	// Initialize online/offline listeners
+	const initializeNetworkListeners = () => {
+		// Check backend connection on initial load
+		updateOnlineStatus(navigator.onLine)
+		
+		window.addEventListener('online', () => updateOnlineStatus(true))
+		window.addEventListener('offline', () => updateOnlineStatus(false))
+		
+		// Periodically check backend connection (every 30 seconds)
+		setInterval(async () => {
+			if (navigator.onLine) {
+				const reachable = await checkBackendConnection()
+				if (reachable !== isOnline.value) {
+					updateOnlineStatus(true)
+				}
+			}
+		}, 30000)
+	}
+
 	return {
 		todos,
 		categories,
@@ -201,6 +300,11 @@ export const useTodoStore = defineStore('todos', () => {
 		isLoading,
 		error,
 		activeCategoryId,
+		isOnline,
+		isSyncing,
+		showConflictModal,
+		currentConflicts,
+		conflictDataType,
 		initialize,
 		loadTodos,
 		loadCategories,
@@ -213,5 +317,8 @@ export const useTodoStore = defineStore('todos', () => {
 		toggleTodoStatus,
 		deleteTodo,
 		getTodosByProject,
+		performSync,
+		resolveConflicts,
+		initializeNetworkListeners,
 	}
 })
