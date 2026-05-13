@@ -175,7 +175,7 @@ function toggleLoginMode() {
 			<button class="hamburger" @click="sidebarOpen = true">
 				☰
 			</button>
-			<span class="mobile-title">{{ currentView }}</span>
+			<span class="mobile-title">{{ currentViewName }}</span>
 		</header>
 
 		<!-- Mobile Backdrop -->
@@ -230,37 +230,37 @@ function toggleLoginMode() {
 			<nav class="top-links">
 				<button
 					class="nav-btn"
-					@click="setView('addTask')"
+					@click="setView('@@addTask')"
 				>
 					+ Add a Task
 				</button>
 				<button
 					class="nav-btn"
-					@click="setView('askAi')"
+					@click="setView('@@askAi')"
 				>
 					Ask AI
 				</button>
 				<button
 					class="nav-btn"
-					@click="setView('recurringTasks')"
+					@click="setView('@@recurringTasks')"
 				>
 					Recurring Tasks
 				</button>
 				<button
 					class="nav-btn"
-					@click="setView('todos')"
+					@click="setView('@@todos')"
 				>
 					All Todos
 				</button>
 				<button
 					class="nav-btn"
-					@click="setView('manageCategories')"
+					@click="setView('@@manageCategories')"
 				>
 					Manage Categories
 				</button>
 				<button
 					class="nav-btn"
-					@click="setView('themeBrowser')"
+					@click="setView('@@themeBrowser')"
 				>
 					Theme Browser
 				</button>
@@ -295,7 +295,7 @@ function toggleLoginMode() {
 
 			<button
 				class="settings"
-				@click="setView('settings')"
+				@click="setView('@@settings')"
 			>
 				Settings
 			</button>
@@ -383,16 +383,30 @@ export default {
 
 	computed: {
 		currentComponent() {
+			// Navigation views use @@ prefix so they never collide with category names
 			const views = {
-				settings: "SettingsView",
-				addTask: "TodoCreateForm",
-				askAi: "AiAssistantView",
-				todos: "TodosListView",
-				manageCategories: "CategoryManagementView",
-				recurringTasks: "RecurringTasksView",
-				themeBrowser: "ThemeBrowserView",
+				"@@settings": "SettingsView",
+				"@@addTask": "TodoCreateForm",
+				"@@askAi": "AiAssistantView",
+				"@@todos": "TodosListView",
+				"@@manageCategories": "CategoryManagementView",
+				"@@recurringTasks": "RecurringTasksView",
+				"@@themeBrowser": "ThemeBrowserView",
 			};
 			return views[this.currentView] || "TodosListView";
+		},
+		// Strip @@ prefix for readable display
+		currentViewName() {
+			const labels = {
+				"@@settings": "Settings",
+				"@@addTask": "Add Task",
+				"@@askAi": "Ask AI",
+				"@@todos": "All Todos",
+				"@@manageCategories": "Manage Categories",
+				"@@recurringTasks": "Recurring Tasks",
+				"@@themeBrowser": "Theme Browser",
+			};
+			return labels[this.currentView] || this.currentView.replace('@@', '');
 		},
 		favoriteCategories() {
 			return this.categories.filter((cat) => cat.favorite === true);
@@ -420,28 +434,18 @@ export default {
 			}
 		},
 		setView(view) {
-			// Reserved view names — these take priority over category names
-			const RESERVED_VIEWS = [
-				'settings',
-				'addTask',
-				'askAi',
-				'recurringTasks',
-				'todos',
-				'manageCategories',
-				'themeBrowser',
-			]
-
-			if (RESERVED_VIEWS.includes(view)) {
+			// @@ prefix = navigation view (never collides with category names)
+			if (view.startsWith('@@')) {
 				this.currentView = view;
 				this.currentCategory = null;
 			} else {
-				// Check if view matches any category name (case-insensitive)
+				// Otherwise, try to match a category by name
 				const matchedCategory = (this.categories || []).find(
 					(cat) => cat.name.toLowerCase() === view.toLowerCase(),
 				);
 
 				if (matchedCategory) {
-					this.currentView = "todos";
+					this.currentView = "@@todos";
 					this.currentCategory = matchedCategory.name;
 				} else {
 					this.currentView = view;
