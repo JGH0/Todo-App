@@ -1,5 +1,6 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from "vue";
+import { applyTheme } from "../utils/themeSettings";
 
 const iframeUrl = ref(
   "http://localhost/Todo-App-Backend/public/index.php/themes?parent=todo-app",
@@ -203,8 +204,11 @@ const installThemeDirectly = (theme) => {
   // Dispatch event to notify settings
   window.dispatchEvent(new CustomEvent("external-themes-updated"));
 
+  // Automatically apply the installed theme
+  applyTheme(newTheme.id);
+
   alert(
-    `${theme.name} has been installed successfully! Check Settings to apply it.`,
+    `${theme.name} has been installed and applied successfully!`,
   );
 };
 
@@ -221,8 +225,8 @@ const previewTheme = (theme) => {
   // Encode theme data for URL
   const encodedTheme = btoa(JSON.stringify(themeData));
 
-  // Build preview URL using current page URL as base
-  const currentUrl = new URL(window.location.href);
+  // Build preview URL using origin (root of the app) as base
+  const currentUrl = new URL("/", window.location.origin);
   currentUrl.searchParams.set("__theme_preview", encodedTheme);
   currentUrl.searchParams.set("__preview_mode", "true");
 
@@ -267,6 +271,9 @@ const installTheme = () => {
 
   // Dispatch event to notify settings
   window.dispatchEvent(new CustomEvent("external-themes-updated"));
+
+  // Automatically apply the installed theme
+  applyTheme(newTheme.id);
 
   // Close popup and reset
   showInstallPopup.value = false;
@@ -340,6 +347,14 @@ const handleHashChange = () => {
     } catch (error) {
       console.error("Error parsing theme data from hash:", error);
     }
+  }
+};
+
+const handleIframeMessage = (event) => {
+  if (event.data && event.data.type === "THEME_DOWNLOAD_REQUEST") {
+    console.log("Theme download requested from iframe:", event.data.theme);
+    installingTheme.value = event.data.theme;
+    showInstallPopup.value = true;
   }
 };
 

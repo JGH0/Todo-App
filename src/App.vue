@@ -76,72 +76,6 @@ import {
   loadWallpaper,
 } from "@/utils/themeSettings";
 
-// Helper to show preview banner inside iframe previews
-function showPreviewIndicator(themeName) {
-  const existing = document.getElementById("theme-preview-indicator");
-  if (existing) existing.remove();
-
-  const indicator = document.createElement("div");
-  indicator.id = "theme-preview-indicator";
-  indicator.innerHTML = `
-    <div class="preview-indicator-content">
-      <span>🎨 Preview Mode: <strong>${themeName}</strong></span>
-      <button id="close-preview-indicator">✕ Close Preview</button>
-    </div>
-  `;
-  indicator.style.cssText = `
-    position: fixed;
-    top: 0;
-    left: 0;
-    right: 0;
-    background: linear-gradient(135deg, #3b82f6, #2563eb);
-    color: white;
-    padding: 12px 20px;
-    font-size: 14px;
-    font-weight: 500;
-    z-index: 10000;
-    box-shadow: 0 2px 8px rgba(59, 130, 246, 0.3);
-    text-align: center;
-  `;
-
-  const style = document.createElement("style");
-  style.textContent = `
-    .preview-indicator-content {
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 12px;
-      max-width: 1200px;
-      margin: 0 auto;
-    }
-    #close-preview-indicator {
-      background: rgba(255, 255, 255, 0.2);
-      border: 1px solid rgba(255, 255, 255, 0.3);
-      color: white;
-      border-radius: 4px;
-      padding: 4px 8px;
-      font-size: 12px;
-      cursor: pointer;
-      transition: background 0.2s;
-    }
-    #close-preview-indicator:hover {
-      background: rgba(255, 255, 255, 0.3);
-    }
-  `;
-  document.head.appendChild(style);
-  document.body.appendChild(indicator);
-
-  // Add click handler for close button
-  document
-    .getElementById("close-preview-indicator")
-    ?.addEventListener("click", () => {
-      indicator.remove();
-      style.remove();
-      // Reload to clear preview theme and restore original
-      window.location.href = window.location.pathname;
-    });
-}
-
 // Apply stored theme and wallpaper before first render
 const urlParams = new URLSearchParams(location.search);
 
@@ -152,7 +86,6 @@ if (urlParams.has("__theme_preview")) {
     Object.entries(themeData.vars).forEach(([prop, value]) => {
       root.style.setProperty(prop, value);
     });
-    showPreviewIndicator(themeData.name);
   } catch (error) {
     console.error("Error applying theme preview:", error);
   }

@@ -429,7 +429,7 @@ export function loadTheme() {
 }
 
 export function applyTheme(themeId) {
-  const all = getAllThemes();
+  const all = getAllThemesWithExternal();
   const theme = all.find((t) => t.id === themeId) || themes[0];
   const root = document.documentElement;
   for (const [key, value] of Object.entries(theme.vars)) {
