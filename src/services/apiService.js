@@ -11,10 +11,33 @@ import {
 export const isOnline = () => navigator.onLine
 
 // Convert an array of items from snake_case to camelCase
+// Convert string booleans ("1"/"0") from MySQL/MariaDB to real booleans
+function fixBooleans(obj, fields) {
+	for (const field of fields) {
+		if (field in obj && typeof obj[field] === 'string') {
+			if (obj[field] === '1' || obj[field] === '0') {
+				obj[field] = obj[field] === '1'
+			}
+		}
+	}
+	return obj
+}
+
+const BOOLEAN_FIELDS = [
+	'syncEnabled', 'reminderEnabled', 'recurringEnabled',
+	'favorite', 'isPublished', 'isFree', 'isActive',
+]
+
+const BOOLEAN_FIELDS_BACKEND = [
+	'sync_enabled', 'reminder_enabled', 'recurring_enabled',
+	'favorite', 'is_published', 'is_free', 'is_active',
+]
+
 function convertArrayFromBackend(items) {
 	if (!Array.isArray(items)) return items
 	return items.map((item) => {
 		const converted = toFrontendCase(item)
+		fixBooleans(converted, BOOLEAN_FIELDS)
 		// Fix status values
 		if (converted.status) {
 			converted.status = mapStatusToFrontend(converted.status)
@@ -36,6 +59,7 @@ function convertArrayFromBackend(items) {
 // Convert a single item from camelCase to snake_case for sending
 function convertItemToBackend(item) {
 	const converted = toBackendCase(item)
+	fixBooleans(converted, BOOLEAN_FIELDS_BACKEND)
 	if (converted.status) {
 		converted.status = mapStatusToBackend(converted.status)
 	}
