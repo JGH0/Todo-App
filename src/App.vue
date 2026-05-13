@@ -165,10 +165,13 @@ export default {
   async mounted() {
     await this.loadCategories();
     window.addEventListener("categories-updated", this.loadCategories);
+    window.addEventListener("hashchange", this.handleHashChange);
+    this.handleHashChange();
   },
 
   beforeUnmount() {
     window.removeEventListener("categories-updated", this.loadCategories);
+    window.removeEventListener("hashchange", this.handleHashChange);
   },
 
   methods: {
@@ -193,6 +196,51 @@ export default {
         this.currentCategory = null;
       }
       this.sidebarOpen = false;
+    },
+    handleHashChange() {
+      const hash = window.location.hash;
+      if (hash.startsWith("#theme-install:")) {
+        try {
+          const themeData = JSON.parse(
+            decodeURIComponent(hash.substring("#theme-install:".length))
+          );
+          console.log("Installing theme from hash in App.vue:", themeData);
+          
+          const externalThemes = JSON.parse(
+            localStorage.getItem("todo-app.external-themes") || "[]"
+          );
+          
+          if (externalThemes.find((t) => t.name === themeData.name)) {
+            alert(`${themeData.name} is already installed!`);
+          } else {
+            const newTheme = {
+              id: `external-${Date.now()}`,
+              name: themeData.name,
+              description: themeData.description,
+              preview: themeData.preview || ["#ffffff", "#f0f0f0", "#007acc"],
+              vars: { ...themeData.vars },
+              group: "External",
+              source: "direct-install",
+              installedAt: new Date().toISOString(),
+            };
+            
+            externalThemes.push(newTheme);
+            localStorage.setItem(
+              "todo-app.external-themes",
+              JSON.stringify(externalThemes)
+            );
+            
+            window.dispatchEvent(new CustomEvent("external-themes-updated"));
+            applyTheme(newTheme.id);
+            alert(`${themeData.name} has been installed and applied successfully!`);
+          }
+          
+          window.location.hash = "";
+          this.setView("settings");
+        } catch (error) {
+          console.error("Error parsing theme from hash:", error);
+        }
+      }
     },
   },
 };

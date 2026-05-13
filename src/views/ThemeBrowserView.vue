@@ -15,153 +15,33 @@ const previewUrl = ref("");
 const previewThemeName = ref("");
 
 // Hardcoded theme data for direct installation
-const availableThemes = ref([
-  {
-    id: "midnight-void",
-    name: "Midnight Void",
-    description: "A dark theme with purple accents perfect for night coding",
-    preview: ["#1a1a2e", "#16213e", "#7c3aed"],
-    vars: {
-      "--bg": "#1a1a2e",
-      "--surface": "#16213e",
-      "--surface-strong": "#0f172a",
-      "--surface-muted": "#1e293b",
-      "--border": "#374151",
-      "--line": "#4b5563",
-      "--text": "#ffffff",
-      "--text-muted": "#9ca3af",
-      "--text-strong": "#f3f4f6",
-      "--accent": "#7c3aed",
-      "--accent-text": "#ffffff",
-      "--accent-soft": "#4c1d95",
-      "--sidebar-bg": "#16213e",
-      "--sidebar-border": "#374151",
-      "--sidebar-text": "#ffffff",
-      "--sidebar-text-muted": "#9ca3af",
-      "--input-bg": "#1e293b",
-      "--input-border": "#4b5563",
-      "--modal-bg": "#16213e",
-      "--chip": "#4b5563",
-      "--success": "#065f46",
-    },
-  },
-  {
-    id: "ocean-breeze",
-    name: "Ocean Breeze",
-    description: "A calming blue theme inspired by the sea",
-    preview: ["#0f172a", "#1e293b", "#0ea5e9"],
-    vars: {
-      "--bg": "#0f172a",
-      "--surface": "#1e293b",
-      "--surface-strong": "#020617",
-      "--surface-muted": "#334155",
-      "--border": "#334155",
-      "--line": "#475569",
-      "--text": "#f1f5f9",
-      "--text-muted": "#94a3b8",
-      "--text-strong": "#ffffff",
-      "--accent": "#0ea5e9",
-      "--accent-text": "#ffffff",
-      "--accent-soft": "#0c4a6e",
-      "--sidebar-bg": "#1e293b",
-      "--sidebar-border": "#334155",
-      "--sidebar-text": "#f1f5f9",
-      "--sidebar-text-muted": "#94a3b8",
-      "--input-bg": "#334155",
-      "--input-border": "#475569",
-      "--modal-bg": "#1e293b",
-      "--chip": "#475569",
-      "--success": "#047857",
-    },
-  },
-  {
-    id: "forest-green",
-    name: "Forest Green",
-    description: "A natural green theme that's easy on the eyes",
-    preview: ["#14532d", "#166534", "#22c55e"],
-    vars: {
-      "--bg": "#14532d",
-      "--surface": "#166534",
-      "--surface-strong": "#052e16",
-      "--surface-muted": "#15803d",
-      "--border": "#15803d",
-      "--line": "#166534",
-      "--text": "#f0fdf4",
-      "--text-muted": "#86efac",
-      "--text-strong": "#ffffff",
-      "--accent": "#22c55e",
-      "--accent-text": "#ffffff",
-      "--accent-soft": "#052e16",
-      "--sidebar-bg": "#166534",
-      "--sidebar-border": "#15803d",
-      "--sidebar-text": "#f0fdf4",
-      "--sidebar-text-muted": "#86efac",
-      "--input-bg": "#15803d",
-      "--input-border": "#166534",
-      "--modal-bg": "#166534",
-      "--chip": "#15803d",
-      "--success": "#052e16",
-    },
-  },
-  {
-    id: "sunset-glow",
-    name: "Sunset Glow",
-    description: "A warm orange theme reminiscent of golden hour",
-    preview: ["#431407", "#7c2d12", "#ea580c"],
-    vars: {
-      "--bg": "#431407",
-      "--surface": "#7c2d12",
-      "--surface-strong": "#1c1917",
-      "--surface-muted": "#9a3412",
-      "--border": "#9a3412",
-      "--line": "#c2410c",
-      "--text": "#fff7ed",
-      "--text-muted": "#fed7aa",
-      "--text-strong": "#ffffff",
-      "--accent": "#ea580c",
-      "--accent-text": "#ffffff",
-      "--accent-soft": "#7c2d12",
-      "--sidebar-bg": "#7c2d12",
-      "--sidebar-border": "#9a3412",
-      "--sidebar-text": "#fff7ed",
-      "--sidebar-text-muted": "#fed7aa",
-      "--input-bg": "#9a3412",
-      "--input-border": "#c2410c",
-      "--modal-bg": "#7c2d12",
-      "--chip": "#9a3412",
-      "--success": "#14532d",
-    },
-  },
-  {
-    id: "arctic-frost",
-    name: "Arctic Frost",
-    description: "A cool cyan theme like winter ice",
-    preview: ["#083344", "#164e63", "#06b6d4"],
-    vars: {
-      "--bg": "#083344",
-      "--surface": "#164e63",
-      "--surface-strong": "#042f2e",
-      "--surface-muted": "#155e75",
-      "--border": "#155e75",
-      "--line": "#0e7490",
-      "--text": "#f0fdfa",
-      "--text-muted": "#67e8f9",
-      "--text-strong": "#ffffff",
-      "--accent": "#06b6d4",
-      "--accent-text": "#ffffff",
-      "--accent-soft": "#164e63",
-      "--sidebar-bg": "#164e63",
-      "--sidebar-border": "#155e75",
-      "--sidebar-text": "#f0fdfa",
-      "--sidebar-text-muted": "#67e8f9",
-      "--input-bg": "#155e75",
-      "--input-border": "#0e7490",
-      "--modal-bg": "#164e63",
-      "--chip": "#155e75",
-      "--success": "#059669",
-    },
-  },
-]);
+const availableThemes = ref([]);
+
+const fetchThemes = async () => {
+  try {
+    const response = await fetch("http://localhost/Todo-App-Backend/public/index.php/themes", {
+      headers: {
+        Accept: "application/json",
+        Fetch: "true",
+      },
+    });
+    if (response.ok) {
+      const data = await response.json();
+      // Ensure data is array and mapped correctly
+      if (Array.isArray(data)) {
+        availableThemes.value = data.map((t) => ({
+          id: t.name, // Use the slug name as id
+          name: t.display_name,
+          description: t.description,
+          preview: t.preview || ["#ffffff", "#f0f0f0", "#007acc"],
+          vars: t.vars || {},
+        }));
+      }
+    }
+  } catch (error) {
+    console.error("Failed to fetch themes from marketplace:", error);
+  }
+};
 
 const installThemeDirectly = (theme) => {
   console.log("Installing theme directly:", theme);
@@ -331,7 +211,6 @@ const handleIframeLoad = () => {
   isLoading.value = false;
 };
 
-// Monitor URL hash changes for theme data
 const handleHashChange = () => {
   const hash = window.location.hash;
   if (hash.startsWith("#theme-install:")) {
@@ -340,10 +219,11 @@ const handleHashChange = () => {
         decodeURIComponent(hash.substring("#theme-install:".length)),
       );
       console.log("Theme data from hash:", themeData);
-      installingTheme.value = themeData;
-      showInstallPopup.value = true;
-      // Clear the hash
-      window.location.hash = "";
+      
+      installThemeDirectly(themeData);
+      
+      // Clear the hash and navigate to settings so the user can see it
+      window.location.hash = "#/settings";
     } catch (error) {
       console.error("Error parsing theme data from hash:", error);
     }
@@ -359,6 +239,7 @@ const handleIframeMessage = (event) => {
 };
 
 onMounted(() => {
+  fetchThemes();
   window.addEventListener("message", handleIframeMessage);
   window.addEventListener("hashchange", handleHashChange);
 

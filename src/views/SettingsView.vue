@@ -135,6 +135,70 @@ function downloadTheme(theme) {
   downloadFile(css, `${theme.id}.css`, "text/css");
 }
 
+// ── Theme Publishing ───────────────────────────────────────────────────────
+const showPublishModal = ref(false);
+const themeToPublish = ref(null);
+const publishDescription = ref("");
+const publishStatus = ref("");
+const isPublishing = ref(false);
+
+function openPublishModal(theme) {
+  themeToPublish.value = theme;
+  publishDescription.value = "";
+  publishStatus.value = "";
+  showPublishModal.value = true;
+}
+
+async function publishTheme() {
+  if (!themeToPublish.value) return;
+
+  isPublishing.value = true;
+  publishStatus.value = "Generating theme...";
+
+  try {
+    const css = exportThemeAsCss(themeToPublish.value, wallpaperDataUrl.value);
+    const blob = new Blob([css], { type: "text/css" });
+
+    const formData = new FormData();
+    formData.append("display_name", themeToPublish.value.name);
+    formData.append("description", publishDescription.value);
+    formData.append("theme_css", blob, `${themeToPublish.value.id}.css`);
+
+    publishStatus.value = "Uploading to marketplace...";
+
+    const response = await fetch(
+      "http://localhost/Todo-App-Backend/public/index.php/themes/upload",
+      {
+        method: "POST",
+        headers: {
+          Accept: "application/json",
+          Fetch: "true"
+        },
+        body: formData,
+      }
+    );
+
+    if (!response.ok) {
+      // Backend might redirect with an error flash or return HTML, 
+      // but let's check response status.
+      throw new Error(`Server returned ${response.status}`);
+    }
+
+    // Success
+    publishStatus.value = "Theme published successfully!";
+    setTimeout(() => {
+      showPublishModal.value = false;
+      themeToPublish.value = null;
+      publishStatus.value = "";
+    }, 2000);
+  } catch (error) {
+    console.error("Publish error:", error);
+    publishStatus.value = `Failed to publish: ${error.message}`;
+  } finally {
+    isPublishing.value = false;
+  }
+}
+
 // ── Wallpaper ──────────────────────────────────────────────────────────────
 const wallpaperDataUrl = ref(loadWallpaper());
 const wallpaperError = ref("");
@@ -717,6 +781,14 @@ async function exportAsCsv() {
                 </button>
                 <button
                   v-if="theme.group === 'Custom'"
+                  class="icon-btn"
+                  title="Publish to Marketplace"
+                  @click.stop="openPublishModal(theme)"
+                >
+                  &#8593;
+                </button>
+                <button
+                  v-if="theme.group === 'Custom'"
                   class="icon-btn danger"
                   title="Delete theme"
                   @click.stop="deleteCustomTheme(theme.id)"
@@ -779,6 +851,40 @@ async function exportAsCsv() {
           <div class="actions creator-actions">
             <button @click="saveCustomTheme">Save Theme</button>
             <button class="btn-ghost" @click="showThemeCreator = false">
+              Cancel
+            </button>
+          </div>
+        </div>
+
+        <!-- Publish Modal -->
+        <div v-if="showPublishModal" class="theme-creator publish-modal">
+          <h3>Publish Theme</h3>
+          <p class="hint">
+            Upload "<strong>{{ themeToPublish?.name }}</strong>" to the public
+            marketplace for others to use.
+          </p>
+
+          <div class="row">
+            <label>Description</label>
+            <textarea
+              v-model="publishDescription"
+              placeholder="Describe your theme's mood and colors..."
+              rows="3"
+            ></textarea>
+          </div>
+
+          <p v-if="publishStatus" class="status" :class="{ warn: publishStatus.includes('Failed'), success: publishStatus.includes('successfully') }">
+            {{ publishStatus }}
+          </p>
+
+          <div class="actions creator-actions">
+            <button
+              @click="publishTheme"
+              :disabled="isPublishing"
+            >
+              {{ isPublishing ? "Publishing..." : "Publish to Marketplace" }}
+            </button>
+            <button class="btn-ghost" @click="showPublishModal = false" :disabled="isPublishing">
               Cancel
             </button>
           </div>
