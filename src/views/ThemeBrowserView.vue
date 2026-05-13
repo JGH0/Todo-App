@@ -1,13 +1,7 @@
 <script setup>
 import { ref, onMounted, onUnmounted } from "vue";
 import { applyTheme } from "../utils/themeSettings";
-
-const iframeUrl = ref(
-  "http://localhost/Todo-App-Backend/public/index.php/themes?parent=todo-app",
-);
-const isLoading = ref(true);
-const showInstallPopup = ref(false);
-const installingTheme = ref(null);
+import { getThemeStoreBaseUrl } from "../utils/backendSettings";
 
 // Preview iframe state
 const showPreviewOverlay = ref(false);
@@ -22,7 +16,7 @@ const fetchThemes = async () => {
   isLoadingThemes.value = true;
   themesError.value = "";
   try {
-    const response = await fetch("http://localhost/Todo-App-Backend/public/index.php/themes", {
+    const response = await fetch(`${getThemeStoreBaseUrl()}/themes`, {
       headers: {
         Accept: "application/json",
         Fetch: "true",
@@ -131,94 +125,6 @@ const closePreview = () => {
   previewThemeName.value = "";
 };
 
-const installTheme = () => {
-  if (!installingTheme.value) return;
-
-  console.log("Installing theme:", installingTheme.value);
-
-  // Add theme to external themes storage using the correct storage key
-  const externalThemes = JSON.parse(
-    localStorage.getItem("todo-app.external-themes") || "[]",
-  );
-  const newTheme = {
-    id: `external-${Date.now()}`,
-    name: installingTheme.value.name,
-    preview: installingTheme.value.preview || ["#ffffff", "#f0f0f0", "#007acc"],
-    vars: installingTheme.value.vars || {},
-    group: "External",
-    source: installingTheme.value.source || "external",
-    installedAt: new Date().toISOString(),
-  };
-
-  externalThemes.push(newTheme);
-  localStorage.setItem(
-    "todo-app.external-themes",
-    JSON.stringify(externalThemes),
-  );
-
-  console.log("Theme saved to localStorage:", newTheme);
-
-  // Dispatch event to notify settings
-  window.dispatchEvent(new CustomEvent("external-themes-updated"));
-
-  // Automatically apply the installed theme
-  applyTheme(newTheme.id);
-
-  // Close popup and reset
-  showInstallPopup.value = false;
-  installingTheme.value = null;
-
-  // Send success message back to iframe
-  const iframe = document.querySelector("iframe");
-  if (iframe && iframe.contentWindow) {
-    iframe.contentWindow.postMessage(
-      {
-        type: "THEME_DOWNLOAD_SUCCESS",
-        data: { themeId: newTheme.id },
-      },
-      "*",
-    );
-    console.log("Sent download success message to iframe");
-  }
-};
-
-const cancelInstall = () => {
-  showInstallPopup.value = false;
-  installingTheme.value = null;
-};
-
-const refreshIframe = () => {
-  isLoading.value = true;
-  const iframe = document.querySelector("iframe");
-  if (iframe) {
-    iframe.src = iframe.src;
-  }
-};
-
-// Test function to simulate theme download (for testing purposes)
-const testInstall = () => {
-  const testTheme = {
-    name: "Midnight Void",
-    description: "A dark theme with purple accents",
-    preview: ["#1a1a2e", "#16213e", "#7c3aed"],
-    vars: {
-      "--bg": "#1a1a2e",
-      "--surface": "#16213e",
-      "--accent": "#7c3aed",
-      "--text": "#ffffff",
-      "--border": "#374151",
-    },
-    source: "theme-store",
-  };
-  console.log("Testing download with:", testTheme);
-  installingTheme.value = testTheme;
-  showInstallPopup.value = true;
-};
-
-const handleIframeLoad = () => {
-  console.log("Iframe loaded");
-  isLoading.value = false;
-};
 
 const handleHashChange = () => {
   const hash = window.location.hash;
@@ -239,31 +145,13 @@ const handleHashChange = () => {
   }
 };
 
-const handleIframeMessage = (event) => {
-  if (event.data && event.data.type === "THEME_DOWNLOAD_REQUEST") {
-    console.log("Theme download requested from iframe:", event.data.theme);
-    installingTheme.value = event.data.theme;
-    showInstallPopup.value = true;
-  }
-};
-
 onMounted(() => {
   fetchThemes();
-  window.addEventListener("message", handleIframeMessage);
   window.addEventListener("hashchange", handleHashChange);
-
-  // Check for initial hash
   handleHashChange();
-
-  // Add load listener to iframe
-  const iframe = document.querySelector("iframe");
-  if (iframe) {
-    iframe.addEventListener("load", handleIframeLoad);
-  }
 });
 
 onUnmounted(() => {
-  window.removeEventListener("message", handleIframeMessage);
   window.removeEventListener("hashchange", handleHashChange);
 });
 </script>

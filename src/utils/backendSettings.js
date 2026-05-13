@@ -38,3 +38,24 @@ export function getBackendPresetId(url) {
   const preset = BACKEND_PRESETS.find((p) => p.url === url);
   return preset ? preset.id : "custom";
 }
+
+// ── Theme store URL settings ───────────────────────────────────────────────
+// Separate from the main API URL because the theme store is always the
+// CodeIgniter backend, regardless of which API backend the user picks.
+
+const THEME_STORE_URL_KEY = "todo-app.theme-store-url";
+
+export const DEFAULT_THEME_STORE_URL =
+  "http://localhost/Todo-App-Backend/public/index.php";
+
+export function loadThemeStoreUrl() {
+  return localStorage.getItem(THEME_STORE_URL_KEY) || DEFAULT_THEME_STORE_URL;
+}
+
+export function saveThemeStoreUrl(url) {
+  localStorage.setItem(THEME_STORE_URL_KEY, url.replace(/\/+$/, ""));
+}
+
+export function getThemeStoreBaseUrl() {
+  return loadThemeStoreUrl();
+}

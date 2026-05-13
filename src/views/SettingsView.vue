@@ -34,6 +34,8 @@ import {
   loadBackendUrl,
   saveBackendUrl,
   getBackendPresetId,
+  loadThemeStoreUrl,
+  saveThemeStoreUrl,
   BACKEND_PRESETS,
 } from "@/utils/backendSettings";
 import { updateApiBaseUrl } from "@/services/api";
@@ -181,7 +183,7 @@ async function publishTheme() {
     publishStatus.value = "Uploading to marketplace...";
 
     const response = await fetch(
-      "http://localhost/Todo-App-Backend/public/index.php/themes/upload",
+      `${themeStoreUrl.value}/themes/upload`,
       {
         method: "POST",
         headers: {
@@ -578,6 +580,13 @@ watch(customBackendUrl, () => {
     saveBackendUrl(backendUrl.value);
     updateApiBaseUrl(backendUrl.value);
   }
+});
+
+// ── Theme store URL ───────────────────────────────────────────────────────────
+const themeStoreUrl = ref(loadThemeStoreUrl());
+
+watch(themeStoreUrl, (val) => {
+  saveThemeStoreUrl(val);
 });
 
 // ── Helpers ──────────────────────────────────────────────────────────────────
@@ -1104,6 +1113,20 @@ async function exportAsCsv() {
         <p class="hint">
           Changes take effect immediately. The connection test happens
           automatically on the next API call.
+        </p>
+
+        <div class="row" style="margin-top: 16px;">
+          <label for="theme-store-url">Theme store URL</label>
+          <input
+            id="theme-store-url"
+            v-model="themeStoreUrl"
+            type="url"
+            placeholder="http://localhost/Todo-App-Backend/public/index.php"
+          />
+        </div>
+        <p class="hint">
+          Base URL of the CodeIgniter theme marketplace backend. Change this if
+          your friend hosts it elsewhere.
         </p>
       </article>
 
