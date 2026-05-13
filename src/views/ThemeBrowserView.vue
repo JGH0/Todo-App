@@ -14,10 +14,13 @@ const showPreviewOverlay = ref(false);
 const previewUrl = ref("");
 const previewThemeName = ref("");
 
-// Hardcoded theme data for direct installation
 const availableThemes = ref([]);
+const isLoadingThemes = ref(false);
+const themesError = ref("");
 
 const fetchThemes = async () => {
+  isLoadingThemes.value = true;
+  themesError.value = "";
   try {
     const response = await fetch("http://localhost/Todo-App-Backend/public/index.php/themes", {
       headers: {
@@ -27,19 +30,25 @@ const fetchThemes = async () => {
     });
     if (response.ok) {
       const data = await response.json();
-      // Ensure data is array and mapped correctly
       if (Array.isArray(data)) {
         availableThemes.value = data.map((t) => ({
-          id: t.name, // Use the slug name as id
+          id: t.name,
           name: t.display_name,
           description: t.description,
           preview: t.preview || ["#ffffff", "#f0f0f0", "#007acc"],
           vars: t.vars || {},
         }));
+      } else {
+        themesError.value = "Unexpected response from server.";
       }
+    } else {
+      themesError.value = `Server error: ${response.status}`;
     }
   } catch (error) {
     console.error("Failed to fetch themes from marketplace:", error);
+    themesError.value = "Could not reach the marketplace. Make sure the backend is running.";
+  } finally {
+    isLoadingThemes.value = false;
   }
 };
 
@@ -268,7 +277,16 @@ onUnmounted(() => {
       </p>
     </div>
 
-    <div class="themes-grid">
+    <div v-if="isLoadingThemes" class="state-message">Loading themes...</div>
+    <div v-else-if="themesError" class="state-message error-message">
+      {{ themesError }}
+      <button class="retry-btn" @click="fetchThemes">Retry</button>
+    </div>
+    <div v-else-if="availableThemes.length === 0" class="state-message">
+      No themes available in the marketplace yet.
+    </div>
+
+    <div v-else class="themes-grid">
       <div v-for="theme in availableThemes" :key="theme.id" class="theme-card">
         <div class="theme-preview">
           <span
@@ -290,10 +308,10 @@ onUnmounted(() => {
             @click="previewTheme(theme)"
             :disabled="showPreviewOverlay"
           >
-            👁️ Preview
+            Preview
           </button>
           <button class="install-button" @click="installThemeDirectly(theme)">
-            🚀 Install Theme
+            Install
           </button>
         </div>
       </div>
@@ -336,6 +354,35 @@ onUnmounted(() => {
   margin: 0;
   color: var(--text-muted);
   font-size: 14px;
+}
+
+.state-message {
+  color: var(--text-muted);
+  font-size: 14px;
+  padding: 40px 0;
+  text-align: center;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  gap: 12px;
+}
+
+.error-message {
+  color: #ef4444;
+}
+
+.retry-btn {
+  background: var(--surface-muted);
+  border: 1px solid var(--border);
+  color: var(--text);
+  padding: 6px 14px;
+  border-radius: 6px;
+  font-size: 13px;
+  cursor: pointer;
+}
+
+.retry-btn:hover {
+  background: var(--surface-strong);
 }
 
 .themes-grid {
