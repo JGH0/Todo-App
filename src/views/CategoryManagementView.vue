@@ -171,6 +171,17 @@ const saveEdit = async (cat) => {
 		return
 	}
 
+	// Check for duplicate name (excluding current category)
+	const exists = categories.value.some(
+		(c) => c.id !== cat.id && c.name.toLowerCase() === newName.toLowerCase()
+	)
+	if (exists) {
+		error.value = 'A category with this name already exists.'
+		setTimeout(() => error.value = null, 3000)
+		cancelEdit()
+		return
+	}
+
 	isProcessing.value = true
 	try {
 		const updatedCat = { ...cat, name: newName }
@@ -236,6 +247,17 @@ const closeAddModal = () => {
 const createNewCategory = async () => {
 	const name = newCategoryName.value.trim()
 	if (!name) return
+
+	// Check for duplicate name
+	const exists = categories.value.some(
+		(c) => c.name.toLowerCase() === name.toLowerCase()
+	)
+	if (exists) {
+		error.value = 'A category with this name already exists.'
+		setTimeout(() => error.value = null, 3000)
+		return
+	}
+
 	try {
 		const newCat = { name, favorite: isFavorite.value }
 		const saved = await createCategory(newCat)

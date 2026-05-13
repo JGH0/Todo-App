@@ -116,7 +116,12 @@ const validate = () => {
 
 const addCategory = () => {
   const value = form.categoryInput.trim()
-  if (!value || form.categories.includes(value)) {
+  if (!value) {
+    form.categoryInput = ''
+    return
+  }
+  // Prevent duplicates (case-insensitive)
+  if (form.categories.some((c) => c.toLowerCase() === value.toLowerCase())) {
     form.categoryInput = ''
     return
   }

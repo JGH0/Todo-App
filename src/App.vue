@@ -420,17 +420,33 @@ export default {
 			}
 		},
 		setView(view) {
-			// Check if view matches any category name (case-insensitive)
-			const matchedCategory = (this.categories || []).find(
-				(cat) => cat.name.toLowerCase() === view.toLowerCase(),
-			);
+			// Reserved view names — these take priority over category names
+			const RESERVED_VIEWS = [
+				'settings',
+				'addTask',
+				'askAi',
+				'recurringTasks',
+				'todos',
+				'manageCategories',
+				'themeBrowser',
+			]
 
-			if (matchedCategory) {
-				this.currentView = "todos";
-				this.currentCategory = matchedCategory.name;
-			} else {
+			if (RESERVED_VIEWS.includes(view)) {
 				this.currentView = view;
 				this.currentCategory = null;
+			} else {
+				// Check if view matches any category name (case-insensitive)
+				const matchedCategory = (this.categories || []).find(
+					(cat) => cat.name.toLowerCase() === view.toLowerCase(),
+				);
+
+				if (matchedCategory) {
+					this.currentView = "todos";
+					this.currentCategory = matchedCategory.name;
+				} else {
+					this.currentView = view;
+					this.currentCategory = null;
+				}
 			}
 			this.sidebarOpen = false;
 		},
