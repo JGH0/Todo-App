@@ -21,8 +21,6 @@ import {
   saveCustomThemes,
   loadExternalThemes,
   saveExternalThemes,
-  getAllThemes,
-  getAllThemesWithExternal,
   exportThemeAsCss,
   loadWallpaper,
   saveWallpaper,
@@ -32,6 +30,15 @@ import {
 } from "@/utils/themeSettings";
 import { getTodos } from "@/services/todoService";
 import { getCategories } from "@/services/categoryService";
+<<<<<<< Updated upstream
+=======
+import {
+  login,
+  register,
+  logout,
+  getUser,
+} from "@/services/authService";
+>>>>>>> Stashed changes
 
 // ── Theme ──────────────────────────────────────────────────────────────────
 const currentTheme = ref(loadTheme());
@@ -213,8 +220,13 @@ function handleWallpaperUpload(event) {
   }
   const reader = new FileReader();
   reader.onload = (e) => {
+    const ok = saveWallpaper(e.target.result);
+    if (!ok) {
+      wallpaperError.value =
+        "Could not save wallpaper — storage quota exceeded. Try a smaller image.";
+      return;
+    }
     wallpaperDataUrl.value = e.target.result;
-    saveWallpaper(e.target.result);
     applyWallpaper(e.target.result);
   };
   reader.readAsDataURL(file);
