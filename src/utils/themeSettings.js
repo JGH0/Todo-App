@@ -446,10 +446,15 @@ export function loadWallpaper() {
 }
 
 export function saveWallpaper(dataUrl) {
-  if (dataUrl) {
-    localStorage.setItem(WALLPAPER_KEY, dataUrl);
-  } else {
-    localStorage.removeItem(WALLPAPER_KEY);
+  try {
+    if (dataUrl) {
+      localStorage.setItem(WALLPAPER_KEY, dataUrl);
+    } else {
+      localStorage.removeItem(WALLPAPER_KEY);
+    }
+    return true;
+  } catch {
+    return false;
   }
 }
 

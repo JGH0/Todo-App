@@ -21,8 +21,6 @@ import {
   saveCustomThemes,
   loadExternalThemes,
   saveExternalThemes,
-  getAllThemes,
-  getAllThemesWithExternal,
   exportThemeAsCss,
   loadWallpaper,
   saveWallpaper,
@@ -182,20 +180,17 @@ async function publishTheme() {
 
     publishStatus.value = "Uploading to marketplace...";
 
-    const response = await fetch(
-      `${themeStoreUrl.value}/themes/upload`,
-      {
-        method: "POST",
-        headers: {
-          Accept: "application/json",
-          Fetch: "true"
-        },
-        body: formData,
-      }
-    );
+    const response = await fetch(`${themeStoreUrl.value}/themes/upload`, {
+      method: "POST",
+      headers: {
+        Accept: "application/json",
+        Fetch: "true",
+      },
+      body: formData,
+    });
 
     if (!response.ok) {
-      // Backend might redirect with an error flash or return HTML, 
+      // Backend might redirect with an error flash or return HTML,
       // but let's check response status.
       throw new Error(`Server returned ${response.status}`);
     }
@@ -229,8 +224,13 @@ function handleWallpaperUpload(event) {
   }
   const reader = new FileReader();
   reader.onload = (e) => {
+    const ok = saveWallpaper(e.target.result);
+    if (!ok) {
+      wallpaperError.value =
+        "Could not save wallpaper — storage quota exceeded. Try a smaller image.";
+      return;
+    }
     wallpaperDataUrl.value = e.target.result;
-    saveWallpaper(e.target.result);
     applyWallpaper(e.target.result);
   };
   reader.readAsDataURL(file);
@@ -336,9 +336,11 @@ function getInitialStatus() {
   }
 
   if (settings.models.length) {
-    return "Saved " +
+    return (
+      "Saved " +
       settings.models.length +
-      " model option(s). Refresh to reload from the active profile.";
+      " model option(s). Refresh to reload from the active profile."
+    );
   }
 
   return "Load models from the active profile.";
@@ -440,9 +442,8 @@ async function loadModels() {
       return;
     }
 
-    connectionStatus.value = "Connected. Loaded " +
-      form.value.models.length +
-      " model(s).";
+    connectionStatus.value =
+      "Connected. Loaded " + form.value.models.length + " model(s).";
   } catch (error) {
     connectionStatus.value = "Connection failed: " + error.message;
     form.value.models = [];
@@ -977,8 +978,8 @@ async function exportAsCsv() {
         <div v-if="showPublishModal" class="theme-creator publish-modal">
           <h3>Publish Theme</h3>
           <p class="hint">
-            Upload "<strong>{{ themeToPublish?.name }}</strong>" to the public
-            marketplace for others to use.
+            Upload "<strong>{{ themeToPublish?.name }}</strong
+            >" to the public marketplace for others to use.
           </p>
 
           <div class="row">
@@ -990,18 +991,26 @@ async function exportAsCsv() {
             ></textarea>
           </div>
 
-          <p v-if="publishStatus" class="status" :class="{ warn: publishStatus.includes('Failed'), success: publishStatus.includes('successfully') }">
+          <p
+            v-if="publishStatus"
+            class="status"
+            :class="{
+              warn: publishStatus.includes('Failed'),
+              success: publishStatus.includes('successfully'),
+            }"
+          >
             {{ publishStatus }}
           </p>
 
           <div class="actions creator-actions">
-            <button
-              @click="publishTheme"
-              :disabled="isPublishing"
-            >
+            <button @click="publishTheme" :disabled="isPublishing">
               {{ isPublishing ? "Publishing..." : "Publish to Marketplace" }}
             </button>
-            <button class="btn-ghost" @click="showPublishModal = false" :disabled="isPublishing">
+            <button
+              class="btn-ghost"
+              @click="showPublishModal = false"
+              :disabled="isPublishing"
+            >
               Cancel
             </button>
           </div>
@@ -1115,7 +1124,7 @@ async function exportAsCsv() {
           automatically on the next API call.
         </p>
 
-        <div class="row" style="margin-top: 16px;">
+        <div class="row" style="margin-top: 16px">
           <label for="theme-store-url">Theme store URL</label>
           <input
             id="theme-store-url"
@@ -1133,9 +1142,7 @@ async function exportAsCsv() {
       <!-- Backend Authentication -->
       <article class="panel">
         <h2>Backend Authentication</h2>
-        <p class="hint">
-          Login to sync your todos with the backend server.
-        </p>
+        <p class="hint">Login to sync your todos with the backend server.</p>
 
         <div v-if="currentUser" class="user-info">
           <p>
@@ -1191,9 +1198,7 @@ async function exportAsCsv() {
             </button>
             <button @click="toggleAuthMode">
               {{
-                authMode === "login"
-                  ? "Create new account"
-                  : "Back to login"
+                authMode === "login" ? "Create new account" : "Back to login"
               }}
             </button>
           </div>
