@@ -22,7 +22,6 @@ const fetchThemes = async () => {
     const response = await fetch("http://localhost/Todo-App-Backend/public/index.php/themes", {
       headers: {
         Accept: "application/json",
-        Fetch: "true",
       },
     });
     if (response.ok) {
