@@ -19,7 +19,6 @@ const fetchThemes = async () => {
     const response = await fetch(`${getThemeStoreBaseUrl()}/themes`, {
       headers: {
         Accept: "application/json",
-        Fetch: "true",
       },
     });
     if (response.ok) {
