@@ -1130,7 +1130,7 @@ async function exportAsCsv() {
             id="theme-store-url"
             v-model="themeStoreUrl"
             type="url"
-            placeholder="http://localhost/Todo-App-Backend/public/index.php"
+            placeholder="http://localhost:8080/index.php"
           />
         </div>
         <p class="hint">
