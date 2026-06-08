@@ -1156,52 +1156,54 @@ async function exportAsCsv() {
         </div>
 
         <div v-else class="auth-form">
-          <div class="row">
-            <label for="auth-email">Email</label>
-            <input
-              id="auth-email"
-              v-model="authEmail"
-              type="email"
-              placeholder="user@example.com"
-            />
-          </div>
+          <form @submit.prevent="handleAuth">
+            <div class="row">
+              <label for="auth-email">Email</label>
+              <input
+                id="auth-email"
+                v-model="authEmail"
+                type="email"
+                placeholder="user@example.com"
+              />
+            </div>
 
-          <div class="row">
-            <label for="auth-password">Password</label>
-            <input
-              id="auth-password"
-              v-model="authPassword"
-              type="password"
-              placeholder="Your password"
-            />
-          </div>
+            <div class="row">
+              <label for="auth-password">Password</label>
+              <input
+                id="auth-password"
+                v-model="authPassword"
+                type="password"
+                placeholder="Your password"
+              />
+            </div>
 
-          <div v-if="authMode === 'register'" class="row">
-            <label for="auth-name">Name</label>
-            <input
-              id="auth-name"
-              v-model="authName"
-              type="text"
-              placeholder="Your name"
-            />
-          </div>
+            <div v-if="authMode === 'register'" class="row">
+              <label for="auth-name">Name</label>
+              <input
+                id="auth-name"
+                v-model="authName"
+                type="text"
+                placeholder="Your name"
+              />
+            </div>
 
-          <div class="actions">
-            <button :disabled="authLoading" @click="handleAuth">
-              {{
-                authLoading
-                  ? "Loading..."
-                  : authMode === "login"
-                    ? "Login"
-                    : "Register"
-              }}
-            </button>
-            <button @click="toggleAuthMode">
-              {{
-                authMode === "login" ? "Create new account" : "Back to login"
-              }}
-            </button>
-          </div>
+            <div class="actions">
+              <button type="submit" :disabled="authLoading">
+                {{
+                  authLoading
+                    ? "Loading..."
+                    : authMode === "login"
+                      ? "Login"
+                      : "Register"
+                }}
+              </button>
+              <button type="button" @click="toggleAuthMode">
+                {{
+                  authMode === "login" ? "Create new account" : "Back to login"
+                }}
+              </button>
+            </div>
+          </form>
 
           <p v-if="authStatus" class="status">{{ authStatus }}</p>
         </div>

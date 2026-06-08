@@ -4,14 +4,23 @@
 
 const BACKEND_URL_KEY = "todo-app.backend-url";
 
-export const DEFAULT_BACKEND_URL = "http://localhost:8080/api/v1";
+// In production the app runs behind an Nginx reverse proxy that forwards
+// /api/ to the backend container. Use a relative URL so the browser
+// sends API requests to the same origin (no CORS).
+// During Docker builds, the VITE_API_BASE_URL env var can override this.
+const BUILD_API_URL =
+  typeof import.meta !== "undefined" && import.meta.env?.VITE_API_BASE_URL
+    ? import.meta.env.VITE_API_BASE_URL
+    : null;
+
+export const DEFAULT_BACKEND_URL = BUILD_API_URL || "/api/v1";
 export const JSON_SERVER_URL = "http://localhost:3000";
 
 export const BACKEND_PRESETS = [
   {
-    id: "spring-boot",
-    label: "Spring Boot Backend",
-    url: "http://localhost:8080/api/v1",
+    id: "same-origin",
+    label: "Same-Origin Proxy",
+    url: "/api/v1",
   },
   {
     id: "json-server",

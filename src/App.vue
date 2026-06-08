@@ -105,68 +105,74 @@ function toggleLoginMode() {
 			@click.self="showLoginModal = false"
 		>
 			<div class="modal-content">
-				<h2>{{
-						loginMode === "login" ? "Login" : "Register"
-					}}</h2>
+				<form @submit.prevent="handleLogin">
+					<h2>{{
+							loginMode === "login" ? "Login" : "Register"
+						}}</h2>
 
-				<div v-if="loginMode === 'register'" class="form-group">
-					<label for="register-name">Name</label>
-					<input
-						id="register-name"
-						v-model="registerName"
-						type="text"
-						placeholder="Your name"
-					/>
-				</div>
+					<div v-if="loginMode === 'register'" class="form-group">
+						<label for="register-name">Name</label>
+						<input
+							id="register-name"
+							v-model="registerName"
+							type="text"
+							placeholder="Your name"
+						/>
+					</div>
 
-				<div class="form-group">
-					<label for="login-email">Email</label>
-					<input
-						id="login-email"
-						v-model="loginEmail"
-						type="email"
-						placeholder="user@example.com"
-					/>
-				</div>
+					<div class="form-group">
+						<label for="login-email">Email</label>
+						<input
+							id="login-email"
+							v-model="loginEmail"
+							type="email"
+							placeholder="user@example.com"
+						/>
+					</div>
 
-				<div class="form-group">
-					<label for="login-password">Password</label>
-					<input
-						id="login-password"
-						v-model="loginPassword"
-						type="password"
-						placeholder="Your password"
-					/>
-				</div>
+					<div class="form-group">
+						<label for="login-password">Password</label>
+						<input
+							id="login-password"
+							v-model="loginPassword"
+							type="password"
+							placeholder="Your password"
+						/>
+					</div>
 
-				<p v-if="loginError" class="error">{{ loginError }}</p>
+					<p v-if="loginError" class="error">{{ loginError }}</p>
 
-				<div class="modal-actions">
-					<button
-						:disabled="loginLoading"
-						@click="handleLogin"
-					>
-						{{ loginLoading ?
-								"Loading..." :
+					<div class="modal-actions">
+						<button
+							type="submit"
+							:disabled="loginLoading"
+						>
+							{{ loginLoading ?
+									"Loading..." :
+									loginMode === "login" ?
+									"Login" :
+									"Register"
+							}}
+						</button>
+						<button
+							type="button"
+							@click="toggleLoginMode"
+						>
+							{{
 								loginMode === "login" ?
-								"Login" :
-								"Register"
-						}}
-					</button>
-					<button @click="toggleLoginMode">
-						{{
-							loginMode === "login" ?
-								"Create new account" :
-								"Back to login"
-						}}
-					</button>
-					<button
-						@click="showLoginModal = false"
-						class="secondary"
-					>
-						Cancel
-					</button>
-				</div>
+									"Create new account" :
+									"Back to login"
+							}}
+						</button>
+						<button
+							type="button"
+							@click="showLoginModal = false"
+							class="secondary"
+						>
+							Cancel
+						</button>
+					</div>
+				</form>
 			</div>
 		</div>
 
