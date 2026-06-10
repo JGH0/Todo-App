@@ -2,11 +2,8 @@
 import { computed, ref, watch, onMounted, onUnmounted } from "vue";
 import {
   buildModelsEndpointCandidates,
-  buildModelsEndpointCandidatesForUrl,
   getAllModels,
-  getActiveConfig,
   loadAiSettings,
-  normalizeAiSettings,
   parseModels,
   saveAiSettings,
 } from "@/utils/aiSettings";
@@ -655,145 +652,100 @@ async function exportAsCsv() {
     </header>
 
     <div class="settings-grid" style="overflow-y: auto; max-height: calc(100vh - 120px); padding-bottom: 40px;">
-      <!-- AI Server & Models -->
+      <!-- AI Providers -->
       <article class="panel">
-        <h2>AI Server & Models</h2>
-
-        <!-- Profile toggle -->
-        <label class="toggle">
-          <input v-model="form.useDefaultServer" type="checkbox" />
-          <span>Use default server</span>
-        </label>
-
+        <h2>AI Providers</h2>
         <p class="hint">
-          Two server profiles — default and custom. Toggle the checkbox to switch.
-          Each profile has its own URL, API key, additional API endpoints, and models.
+          Add as many AI providers as you want (OpenAI, DeepSeek, Anthropic, Google, Ollama...).
+          Each has its own URL, API key, and models. All models from all providers
+          are shown in the model selectors below.
         </p>
 
-        <!-- Profile selector tabs -->
-        <div class="server-tabs">
-          <button
-            class="tab-btn"
-            :class="{ active: form.useDefaultServer }"
-            @click="form.useDefaultServer = true"
-          >Default Server</button>
-          <button
-            class="tab-btn"
-            :class="{ active: !form.useDefaultServer }"
-            @click="form.useDefaultServer = false"
-          >Custom Server</button>
+        <!-- Add provider form -->
+        <div class="add-provider-row">
+          <input v-model="newProvName" type="text" placeholder="Provider name (e.g. OpenAI)" />
+          <input v-model="newProvUrl" type="url" placeholder="https://api.openai.com/v1" />
+          <input v-model="newProvKey" type="password" placeholder="API key (optional)" autocomplete="off" />
+          <button class="btn-add" @click="addProvider" :disabled="!newProvUrl.trim()">+ Add</button>
         </div>
 
-        <!-- Active server config -->
-        <div class="server-config">
+        <!-- Provider cards -->
+        <div
+          v-for="(prov, idx) in form.providers"
+          :key="prov.id"
+          class="provider-card"
+          :class="{ active: selectedProviderIdx === idx }"
+          @click="selectedProviderIdx = idx"
+        >
+          <div class="provider-header">
+            <strong>{{ prov.name }}</strong>
+            <button class="btn-small btn-danger" @click="removeProvider(prov.id)" :disabled="form.providers.length <= 1">Remove</button>
+          </div>
+
           <div class="row">
             <label>Base URL</label>
-            <input
-              v-model="activeServer().baseUrl"
-              type="url"
-              placeholder="https://api.openai.com/v1"
-            />
+            <input v-model="prov.baseUrl" type="url" placeholder="https://api.openai.com/v1" />
           </div>
           <div class="row">
             <label>API Key</label>
-            <input
-              v-model="activeServer().apiKey"
-              type="password"
-              placeholder="sk-..."
-              autocomplete="off"
-            />
+            <input v-model="prov.apiKey" type="password" placeholder="sk-..." autocomplete="off" />
           </div>
 
-          <!-- Load models from base URL -->
-          <div class="actions">
-            <button :disabled="modelsLoading" @click="loadModels">
-              {{ modelsLoading ? "Loading..." : "Load Models from Base URL" }}
+          <!-- Load models -->
+          <div class="actions" style="margin: 6px 0;">
+            <button :disabled="modelsLoading[prov.id]" @click="loadModelsFor(prov)">
+              {{ modelsLoading[prov.id] ? "Loading..." : "Load Models" }}
             </button>
           </div>
-        </div>
 
-        <!-- Additional API endpoints -->
-        <h3 style="margin-top: 16px; font-size: 0.95em; color: var(--text-muted, #888);">
-          Additional API Endpoints
-        </h3>
-        <p class="hint">
-          Add extra API endpoints to combine their models into the main selector.
-        </p>
+          <!-- Show models for this provider -->
+          <div v-if="prov.models.length || prov.customModels.length" class="prov-models">
+            Models:
+            <span v-for="m in [...new Set([...prov.models, ...(prov.customModels||[])])]" :key="m" class="model-chip">
+              {{ m }}
+              <button class="chip-remove" @click="removeCustomModel(prov.id, m)" title="Remove">&times;</button>
+            </span>
+          </div>
+          <div v-else style="color: #999; font-size: 0.85em; margin:4px 0;">
+            No models yet. Load from endpoint or add below.
+          </div>
 
-        <div
-          v-for="ep in activeServer().apikeys"
-          :key="ep.id"
-          class="ep-card"
-        >
-          <div class="ep-header">
-            <strong>{{ ep.label }}</strong>
-            <button class="btn-small btn-danger" @click="removeApiEndpoint(ep.id)">Remove</button>
-          </div>
-          <div class="ep-detail">{{ ep.url }}</div>
-          <div class="actions" style="margin-top: 4px;">
-            <button
-              class="btn-small"
-              :disabled="epModelsLoading[ep.id]"
-              @click="loadModelsForEp(ep)"
-            >
-              {{ epModelsLoading[ep.id] ? "Loading..." : "Load Models" }}
-            </button>
-          </div>
-          <div v-if="ep.models.length" class="ep-models">
-            Models: {{ ep.models.join(", ") }}
+          <!-- Add custom model to this provider -->
+          <div v-if="selectedProviderIdx === idx" class="inline-row" style="margin-top: 6px;">
+            <input v-model="customModelInput" type="text" placeholder="Type model name"
+              @keydown.enter.prevent="addCustomModel" />
+            <button class="btn-small btn-add-model" @click="addCustomModel" :disabled="!customModelInput.trim()">Add</button>
           </div>
         </div>
 
-        <!-- Add endpoint form -->
-        <div class="add-ep-row">
-          <input v-model="newEpLabel" type="text" placeholder="Label (e.g. DeepSeek Chat)" />
-          <input v-model="newEpUrl" type="url" placeholder="https://api.deepseek.com" />
-          <input v-model="newEpKey" type="password" placeholder="API key (optional)" autocomplete="off" />
-          <button class="btn-small btn-add" @click="addApiEndpoint" :disabled="!newEpUrl.trim()">+ Add</button>
-        </div>
+        <!-- Combined model selectors -->
+        <h3 style="margin: 16px 0 8px; font-size: 1em;">Model Selection</h3>
 
-        <!-- Custom models (manual add) -->
-        <h3 style="margin-top: 16px; font-size: 0.95em; color: var(--text-muted, #888);">
-          Custom Models
-        </h3>
-
-        <div class="inline-row" style="margin-bottom: 8px;">
-          <input v-model="customModelInput" type="text" placeholder="Type model name and press Enter"
-            @keydown.enter.prevent="addCustomModel" />
-          <button class="btn-small btn-add-model" @click="addCustomModel" :disabled="!customModelInput.trim()">Add</button>
-        </div>
-
-        <div class="model-chips">
-          <span v-for="m in allModels()" :key="m" class="model-chip">
-            {{ m }}
-            <button class="chip-remove" @click="removeCustomModel(m)" title="Remove">&times;</button>
-          </span>
-          <span v-if="allModels().length === 0" style="color: #999; font-size: 0.85em;">
-            No models yet. Load from endpoint or add manually.
-          </span>
-        </div>
-
-        <!-- Primary & secondary model selectors -->
-        <div class="row" style="margin-top: 16px;">
+        <div class="row">
           <label>Primary model</label>
           <select v-model="form.primaryModel">
-            <option value="">Select a model</option>
+            <option value="">Select model</option>
             <option v-for="m in allModels()" :key="m" :value="m">{{ m }}</option>
           </select>
         </div>
 
         <label class="toggle">
           <input v-model="form.useSecondModel" type="checkbox" />
-          <span>Combine with second model for higher accuracy</span>
+          <span>Verify with second model (up to 5 rounds of correction)</span>
         </label>
 
         <div v-if="form.useSecondModel" class="row">
-          <label>Secondary model</label>
+          <label>Secondary (verification) model</label>
           <select v-model="form.secondaryModel">
-            <option value="">Select a model</option>
+            <option value="">Select model</option>
             <option v-for="m in allModels()" :key="m" :value="m">{{ m }}</option>
           </select>
         </div>
+
+        <p class="hint" style="margin-top: 8px;">
+          When enabled, the secondary model reviews the primary's response for errors and
+          requests corrections. This loops up to 5 times until the result is satisfactory.
+        </p>
 
         <p class="status" v-if="statusMsg" style="margin-top: 8px;">{{ statusMsg }}</p>
       </article>
@@ -1677,6 +1629,91 @@ code {
   padding: 24px;
   color: var(--text-muted, #999);
   font-style: italic;
+}
+
+
+/* ── AI Provider Cards ────────────────────────────────────────────────────── */
+.add-provider-row {
+  display: flex;
+  gap: 6px;
+  margin-bottom: 14px;
+  flex-wrap: wrap;
+}
+.add-provider-row input {
+  flex: 1;
+  min-width: 120px;
+}
+.btn-add {
+  padding: 7px 14px;
+  background: var(--accent, #0077B6);
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 600;
+  white-space: nowrap;
+}
+.btn-add:hover { opacity: 0.9; }
+.btn-add:disabled { opacity: 0.4; cursor: not-allowed; }
+
+.provider-card {
+  border: 1px solid var(--border, #ddd);
+  border-radius: 7px;
+  padding: 10px 12px;
+  margin-bottom: 10px;
+  background: var(--surface, #fff);
+  cursor: pointer;
+  transition: border-color 0.15s, box-shadow 0.15s;
+}
+.provider-card.active {
+  border-color: var(--accent, #0077B6);
+  box-shadow: 0 0 0 1px var(--accent, #0077B6);
+}
+.provider-header {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  margin-bottom: 8px;
+}
+.provider-card .row {
+  margin-bottom: 6px;
+}
+.provider-card .row input,
+.provider-card .row select {
+  width: 100%;
+}
+.provider-card .actions {
+  margin: 6px 0;
+}
+.prov-models {
+  font-size: 0.85em;
+  color: var(--text-muted, #666);
+  margin: 4px 0;
+}
+.model-chip {
+  display: inline-block;
+  padding: 2px 7px;
+  margin: 2px;
+  background: var(--surface-strong, #e8ecef);
+  border-radius: 4px;
+  font-size: 0.8em;
+  font-family: monospace;
+}
+.chip-remove {
+  background: none;
+  border: none;
+  color: #d32f2f;
+  cursor: pointer;
+  margin-left: 2px;
+  font-weight: bold;
+  padding: 0 2px;
+}
+.inline-row {
+  display: flex;
+  gap: 6px;
+}
+.inline-row input {
+  flex: 1;
 }
 
 </style>

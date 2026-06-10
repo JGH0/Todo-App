@@ -1,73 +1,54 @@
 // ── AI Settings ─────────────────────────────────────────────────────────────
-// Default server + custom server model. Each server has multiple API endpoints,
-// each endpoint can have its own models. All models are combined into one list.
+// Multiple AI providers (OpenAI, DeepSeek, Anthropic, Google, Ollama, etc.)
+// Each provider has its own URL, API key, and models.
+// All models from all providers are shown in a combined list.
 
 export const AI_SETTINGS_STORAGE_KEY = "todo-app.ai-settings-v2"
 export const AI_SETTINGS_EVENT = "todo-app:ai-settings-updated"
 
-const defaultSettings = {
-	useDefaultServer: true,
+function genId() {
+	return "prov_" + Math.random().toString(36).substring(2, 8)
+}
 
-	defaultServer: {
-		baseUrl: "https://api.openai.com/v1",
-		apiKey: "",
-		apikeys: [], // additional API endpoints [{id, url, key, label, models: []}]
-		models: [],   // loaded from endpoint(s)
-		customModels: [], // manually typed
-	},
-
-	customServer: {
-		baseUrl: "",
-		apiKey: "",
-		apikeys: [],
-		models: [],
-		customModels: [],
-	},
-
+const defaults = {
+	providers: [
+		{
+			id: genId(),
+			name: "Default",
+			baseUrl: "https://api.openai.com/v1",
+			apiKey: "",
+			models: [],
+			customModels: [],
+		},
+	],
 	primaryModel: "",
 	useSecondModel: false,
 	secondaryModel: "",
 }
 
-function generateId() { return "ep_" + Math.random().toString(36).substring(2, 8) }
-
 function stripUrl(url) {
 	return typeof url === "string" ? url.trim().replace(/\/+$/, "") : ""
 }
 
-function normalizeApikeys(list) {
-	if (!Array.isArray(list)) return []
-	return list.map(a => ({
-		id: a.id || generateId(),
-		url: stripUrl(a.url),
-		key: typeof a.key === "string" ? a.key : "",
-		label: typeof a.label === "string" ? a.label : "",
-		models: Array.isArray(a.models) ? a.models.filter(Boolean) : [],
-	})).filter(a => a.url)
-}
-
-function normalizeServer(server) {
-	if (!server || typeof server !== "object") {
-		return { baseUrl: "", apiKey: "", apikeys: [], models: [], customModels: [] }
-	}
-	return {
-		baseUrl: stripUrl(server.baseUrl),
-		apiKey: typeof server.apiKey === "string" ? server.apiKey : "",
-		apikeys: normalizeApikeys(server.apikeys),
-		models: Array.isArray(server.models) ? server.models.filter(Boolean) : [],
-		customModels: Array.isArray(server.customModels) ? server.customModels.filter(Boolean) : [],
-	}
-}
-
 export function normalizeAiSettings(settings = {}) {
-	if (!settings || typeof settings !== "object") {
-		return JSON.parse(JSON.stringify(defaultSettings))
+	if (!settings || typeof settings !== "object") return JSON.parse(JSON.stringify(defaults))
+
+	const providers = (Array.isArray(settings.providers) ? settings.providers : []).map(p => ({
+		id: p.id || genId(),
+		name: typeof p.name === "string" ? p.name : "Provider",
+		baseUrl: stripUrl(p.baseUrl),
+		apiKey: typeof p.apiKey === "string" ? p.apiKey : "",
+		models: Array.isArray(p.models) ? p.models.filter(Boolean) : [],
+		customModels: Array.isArray(p.customModels) ? p.customModels.filter(Boolean) : [],
+	}))
+
+	// Ensure at least one provider exists
+	if (providers.length === 0) {
+		providers.push(JSON.parse(JSON.stringify(defaults.providers[0])))
 	}
 
 	return {
-		useDefaultServer: settings.useDefaultServer !== false,
-		defaultServer: normalizeServer(settings.defaultServer),
-		customServer: normalizeServer(settings.customServer),
+		providers,
 		primaryModel: typeof settings.primaryModel === "string" ? settings.primaryModel : "",
 		useSecondModel: settings.useSecondModel === true,
 		secondaryModel: typeof settings.secondaryModel === "string" ? settings.secondaryModel : "",
@@ -75,126 +56,77 @@ export function normalizeAiSettings(settings = {}) {
 }
 
 export function getAllModels(settings) {
-	if (!settings) return []
-	const s = settings.useDefaultServer ? settings.defaultServer : settings.customServer
-	if (!s) return []
-	const fromBase = s.models || []
-	const fromCustom = s.customModels || []
-	const fromApikeys = (s.apikeys || []).flatMap(a => a.models || [])
-	return [...new Set([...fromBase, ...fromCustom, ...fromApikeys])]
-}
-
-export function getActiveConfig(settings) {
-	const s = normalizeAiSettings(settings)
-	const server = s.useDefaultServer ? s.defaultServer : s.customServer
-	return {
-		baseUrl: server.baseUrl,
-		apiKey: server.apiKey,
-		allModels: getAllModels(s),
+	if (!settings || !settings.providers) return []
+	const all = []
+	for (const p of settings.providers) {
+		for (const m of (p.models || [])) if (m && !all.includes(m)) all.push(m)
+		for (const m of (p.customModels || [])) if (m && !all.includes(m)) all.push(m)
 	}
+	return all
 }
 
-// ── Persistence ─────────────────────────────────────────────────────────────
+export function findProviderForModel(settings, model) {
+	if (!settings || !settings.providers || !model) return null
+	for (const p of settings.providers) {
+		for (const m of [...(p.models || []), ...(p.customModels || [])]) {
+			if (m === model) return p
+		}
+	}
+	return null
+}
 
 export function loadAiSettings() {
 	if (typeof window === "undefined") return normalizeAiSettings()
 	try {
 		const raw = window.localStorage.getItem(AI_SETTINGS_STORAGE_KEY)
-		if (raw) return normalizeAiSettings(JSON.parse(raw))
-		// Try old key for migration
-		const oldRaw = window.localStorage.getItem("todo-app.ai-settings")
-		if (oldRaw) {
-			const old = JSON.parse(oldRaw)
-			// Convert old format to new
-			const migrated = migrateOldSettings(old)
-			saveAiSettings(migrated)
-			return migrated
-		}
-		return normalizeAiSettings()
+		return raw ? normalizeAiSettings(JSON.parse(raw)) : normalizeAiSettings()
 	} catch {
 		return normalizeAiSettings()
 	}
 }
 
-function migrateOldSettings(old) {
-	// Old format had providers array or defaultServer/customServer without apikeys
-	const result = normalizeAiSettings()
-	if (old.providers && Array.isArray(old.providers)) {
-		// Take first as default, rest as extra apis
-		const first = old.providers[0]
-		result.defaultServer.baseUrl = first.baseUrl || ""
-		result.defaultServer.apiKey = first.apiKey || ""
-		result.defaultServer.customModels = first.customModels || []
-		result.defaultServer.models = first._loadedModels || []
-		if (old.activeProviderId && first.id !== old.activeProviderId) {
-			const active = old.providers.find(p => p.id === old.activeProviderId)
-			if (active) {
-				result.customServer.baseUrl = active.baseUrl || ""
-				result.customServer.apiKey = active.apiKey || ""
-				result.customServer.customModels = active.customModels || []
-				result.customServer.models = active._loadedModels || []
-				result.useDefaultServer = false
-			}
-		}
-	}
-	if (old.primaryModel) result.primaryModel = old.primaryModel
-	if (old.useSecondModel) result.useSecondModel = true
-	if (old.secondaryModel) result.secondaryModel = old.secondaryModel
-	return result
-}
-
 export function saveAiSettings(settings = {}) {
-	const normalized = normalizeAiSettings(settings)
+	const n = normalizeAiSettings(settings)
 	if (typeof window !== "undefined") {
 		try {
-			window.localStorage.setItem(AI_SETTINGS_STORAGE_KEY, JSON.stringify(normalized))
-			window.dispatchEvent(new CustomEvent(AI_SETTINGS_EVENT, { detail: normalized }))
-		} catch (error) {
-			console.error("Unable to save AI settings.", error)
-		}
+			window.localStorage.setItem(AI_SETTINGS_STORAGE_KEY, JSON.stringify(n))
+			window.dispatchEvent(new CustomEvent(AI_SETTINGS_EVENT, { detail: n }))
+		} catch (e) { console.error("saveAiSettings error", e) }
 	}
-	return normalized
+	return n
 }
 
 // ── Legacy helpers for AiAssistantView ──────────────────────────────────────
 export function getActiveAiConfig(settings = {}) {
 	const s = normalizeAiSettings(settings)
-	const server = s.useDefaultServer ? s.defaultServer : s.customServer
+	const first = s.providers[0]
 	return {
-		source: s.useDefaultServer ? "default" : "custom",
-		serverUrl: server.baseUrl,
-		apiUrl: server.baseUrl,
-		requestBaseUrl: server.baseUrl,
-		apiKey: server.apiKey,
+		source: first.name,
+		serverUrl: first.baseUrl,
+		apiUrl: first.baseUrl,
+		requestBaseUrl: first.baseUrl,
+		apiKey: first.apiKey,
 	}
 }
 
 export { stripUrl as normalizeServerUrl }
 
 // ── Endpoint discovery ──────────────────────────────────────────────────────
-
 function getUrlOrigin(url) {
-	try { return new URL(url).origin }
-	catch { return "" }
+	try { return new URL(url).origin } catch { return "" }
 }
-
 function getUrlPathname(url) {
-	try { return new URL(url).pathname.replace(/\/+$/, "") || "/" }
-	catch { return "/" }
+	try { return new URL(url).pathname.replace(/\/+$/, "") || "/" } catch { return "/" }
 }
-
 function isApiBasePath(p) {
 	const l = p.toLowerCase()
 	return l.endsWith("/api") || /\/v\d[^/]*$/.test(l) || l.includes("/openai")
 }
-
 function joinUrl(base, suffix) {
 	const b = stripUrl(base)
-	if (!b) return ""
-	return `${b}${suffix.startsWith("/") ? suffix : `/${suffix}`}`
+	return b ? `${b}${suffix.startsWith("/") ? suffix : `/${suffix}`}` : ""
 }
-
-function dedupe(urls) { return [...new Set(urls.map(stripUrl).filter(Boolean))] }
+function dedupe(urls) { return [...new Set(urls.filter(Boolean))] }
 
 export function buildModelsEndpointCandidates(baseUrl) {
 	const url = stripUrl(baseUrl)
@@ -203,7 +135,6 @@ export function buildModelsEndpointCandidates(baseUrl) {
 	const lp = pathname.toLowerCase()
 	const origin = getUrlOrigin(url)
 	const c = []
-
 	if (/(\/models|\/api\/models|\/api\/tags|\/v\d[^/]*\/models)$/.test(lp)) c.push(url)
 	if (isApiBasePath(pathname)) {
 		c.push(joinUrl(url, "/models"), joinUrl(url, "/tags"))
@@ -218,18 +149,11 @@ export function buildModelsEndpointCandidates(baseUrl) {
 
 export function buildChatEndpoint(baseUrl) {
 	const url = stripUrl(baseUrl)
-	if (!url) return ""
-	return joinUrl(url, "/chat/completions")
+	return url ? joinUrl(url, "/chat/completions") : ""
 }
 
 export function buildOllamaChatEndpoint(baseUrl) {
-	const url = stripUrl(baseUrl)
-	if (!url) return ""
-	return joinUrl(url, "/api/chat")
-}
-
-export function buildModelsEndpointCandidatesForUrl(url) {
-	return buildModelsEndpointCandidates(url)
+	return baseUrl ? joinUrl(baseUrl, "/api/chat") : ""
 }
 
 export function parseModels(payload) {
@@ -242,12 +166,11 @@ export function parseModels(payload) {
 	}).filter(Boolean)
 }
 
-// Legacy – kept so imports in AiAssistantView still work
+// Legacy – kept for AiAssistantView imports
 export function buildOpenAiChatEndpointCandidates(baseUrl) {
 	const url = stripUrl(baseUrl)
 	return url ? [joinUrl(url, "/chat/completions")] : []
 }
-
 export function buildOllamaChatEndpointCandidates(baseUrl) {
 	return [buildOllamaChatEndpoint(baseUrl)].filter(Boolean)
 }

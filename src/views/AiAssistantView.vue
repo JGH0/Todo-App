@@ -3,6 +3,7 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   AI_SETTINGS_EVENT,
   AI_SETTINGS_STORAGE_KEY,
+  findProviderForModel,
   getAllModels,
   getActiveAiConfig,
   loadAiSettings,
@@ -353,10 +354,17 @@ async function requestJson(urls, options = {}) {
   throw lastError || new Error(`No chat endpoint could be reached from ${activeApiBaseUrl.value}`)
 }
 
-function authHeaders() {
+function authHeaders(modelId) {
   const headers = { 'Content-Type': 'application/json' }
-  if (activeConfig.value.apiKey) {
-    headers.Authorization = `Bearer ${activeConfig.value.apiKey}`
+  // Try to find the provider for this specific model
+  let apiKey = activeConfig.value.apiKey
+  if (modelId) {
+    const n = normalizeAiSettings(aiSettings.value)
+    const prov = findProviderForModel(n, modelId)
+    if (prov && prov.apiKey) apiKey = prov.apiKey
+  }
+  if (apiKey) {
+    headers.Authorization = `Bearer ${apiKey}`
   }
   return headers
 }
@@ -681,10 +689,10 @@ async function sendMessage() {
     })
     return
   }
-  if (!selectedModel.value) {
+  if (!chatModel.value && !selectedModel.value) {
     chatMessages.value.push({
       role: 'assistant',
-      content: 'Please load models and choose a primary model in Settings before proceeding.',
+      content: 'Please select a model from the dropdown or configure one in Settings.',
     })
     return
   }
@@ -694,20 +702,45 @@ async function sendMessage() {
   sending.value = true
 
   try {
-    const primaryPlan = await runChatCompletion(selectedModel.value, text)
-    let finalPlan = primaryPlan
-    if (aiSettings.value.useSecondModel && aiSettings.value.secondaryModel && aiSettings.value.secondaryModel !== chatModel.value) {
-      const secondPlan = await runChatCompletion(aiSettings.value.secondaryModel, text)
-      finalPlan = mergePlans(primaryPlan, secondPlan)
+    let finalResponse = await runChatCompletion(chatModel.value || selectedModel.value, text)
+    
+    // Verification loop: secondary model reviews and requests corrections (max 5 rounds)
+    if (aiSettings.value.useSecondModel && aiSettings.value.secondaryModel && aiSettings.value.secondaryModel !== (chatModel.value || selectedModel.value)) {
+      const verifierModel = aiSettings.value.secondaryModel
+      const primaryModel = chatModel.value || selectedModel.value
+      let rounds = 0
+      const maxRounds = 5
+
+      while (rounds < maxRounds) {
+        rounds++
+        // Ask verifier to check the response
+        const reviewPrompt = `Review the following AI response for any errors, inaccuracies, or improvements needed. If it's correct, respond with only "VERIFIED". If changes are needed, explain what should be fixed.
+
+Response to review:
+${finalResponse}`
+        const review = await runChatCompletion(verifierModel, reviewPrompt)
+        
+        if (review.includes('VERIFIED') || rounds >= maxRounds) {
+          break
+        }
+        
+        // Send feedback back to primary model for correction
+        const correctionPrompt = `Your previous response was reviewed and the following issues were found:
+
+${review}
+
+Please provide a corrected version of your response addressing these issues. Original question was: ${text}`
+        finalResponse = await runChatCompletion(primaryModel, correctionPrompt)
+      }
     }
-    if (!finalPlan) {
+    
+    if (!finalResponse) {
       chatMessages.value.push({
         role: 'assistant',
         content: 'Sorry, I could not understand that. Please try a simpler request, like "Create a task to buy milk".',
       })
     } else {
-      const result = await executePlan(finalPlan)
-      chatMessages.value.push({ role: 'assistant', content: result })
+      chatMessages.value.push({ role: 'assistant', content: finalResponse })
     }
   } catch (error) {
     console.error(error)
