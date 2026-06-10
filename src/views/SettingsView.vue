@@ -1909,7 +1909,20 @@ code {
 }
 .modal-content.modal-sm {
   max-width: 380px;
-  padding: 20px;
+  padding: 24px;
+  background: var(--surface, #fff);
+  border: 1px solid var(--border, #ddd);
+  border-radius: 10px;
+  box-shadow: 0 8px 32px rgba(0,0,0,0.18);
+}
+.modal-content.modal-sm h3 {
+  margin: 0 0 10px;
+  font-size: 1.1em;
+}
+.modal-content.modal-sm p {
+  margin: 0;
+  color: var(--text-muted, #666);
+  font-size: 0.9em;
 }
 .modal-actions {
   display: flex;
