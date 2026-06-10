@@ -3,15 +3,17 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   AI_SETTINGS_EVENT,
   AI_SETTINGS_STORAGE_KEY,
-  buildOllamaChatEndpointCandidates,
-  buildOpenAiChatEndpointCandidates,
+  getAllModels,
   getActiveAiConfig,
   loadAiSettings,
+  normalizeAiSettings,
   normalizeServerUrl,
+  saveAiSettings,
 } from '@/utils/aiSettings'
 import { getTodos, createTodo, updateTodo, deleteTodo } from '@/services/todoService'
 import { getCategories, createCategory } from '@/services/categoryService'
 
+const CHATS_STORAGE_KEY = 'ai-assistant-chats-v2'
 const CHAT_HISTORY_KEY = 'ai-assistant-chat-history'
 
 const aiSettings = ref(loadAiSettings())
@@ -29,7 +31,19 @@ const taskDraft = ref({
 const tasks = ref([])
 const selectedTaskId = ref(null)
 const chatInput = ref('')
-const chatMessages = ref([])
+
+// ── Multi-chat sessions ────────────────────────────────────────────────────
+const chats = ref([])
+const activeChatId = ref(null)
+
+const activeChat = computed(() => {
+  return chats.value.find(c => c.id === activeChatId.value) || chats.value[0] || null
+})
+
+const chatMessages = computed({
+  get: () => activeChat.value?.messages || [],
+  set: (val) => { if (activeChat.value) activeChat.value.messages = val; }
+})
 
 // Confirmation modal
 const pendingAction = ref(null)
@@ -42,59 +56,126 @@ const batchSummary = ref('')
 const batchModalVisible = ref(false)
 let batchResolve = null
 
+// ── Model & config ─────────────────────────────────────────────────────────
+const allModels = computed(() => getAllModels(aiSettings.value))
+const chatModel = ref('')
+
 const activeConfig = computed(() => getActiveAiConfig(aiSettings.value))
-const activeProvider = computed(() => {
-  const settings = aiSettings.value
-  if (!settings || !settings.providers) return null
-  return settings.providers.find(p => p.id === settings.activeProviderId) || settings.providers[0] || null
-})
 const activeServerUrl = computed(() => normalizeServerUrl(activeConfig.value.serverUrl))
 const activeApiBaseUrl = computed(() => normalizeServerUrl(activeConfig.value.requestBaseUrl))
-const activeProviderModel = computed(() => activeProvider.value?.model || '')
-const selectedModel = computed(() => activeProvider.value?.model || '')
 
 const selectedTask = computed(() => tasks.value.find((task) => task.id === selectedTaskId.value) ?? null)
 
-// Persist chat history
-function saveChatHistory() {
-  localStorage.setItem(CHAT_HISTORY_KEY, JSON.stringify(chatMessages.value))
+function generateChatId() {
+  return 'chat_' + Date.now().toString(36) + '_' + Math.random().toString(36).substring(2, 6)
 }
 
-function loadChatHistory() {
-  const saved = localStorage.getItem(CHAT_HISTORY_KEY)
-  if (saved) {
-    try {
-      chatMessages.value = JSON.parse(saved)
-    } catch (e) {
-      console.error('Failed to parse chat history', e)
-    }
+// Persist chats
+function saveChats() {
+  try {
+    localStorage.setItem(CHATS_STORAGE_KEY, JSON.stringify(chats.value))
+  } catch (e) {
+    console.error('Failed to save chats', e)
   }
-  if (!chatMessages.value.length) {
-    chatMessages.value = [
-      {
+}
+
+function loadChats() {
+  try {
+    const saved = localStorage.getItem(CHATS_STORAGE_KEY)
+    if (saved) {
+      chats.value = JSON.parse(saved)
+    }
+  } catch (e) {
+    console.error('Failed to load chats', e)
+  }
+  if (!chats.value || !chats.value.length) {
+    chats.value = [{
+      id: generateChatId(),
+      title: 'Chat 1',
+      createdAt: Date.now(),
+      messages: [{
         role: 'assistant',
         content: 'Hello, I am your AI Assistant. I am ready to help you out :)',
-      },
-    ]
+      }],
+    }]
+  }
+  if (!activeChatId.value || !chats.value.find(c => c.id === activeChatId.value)) {
+    activeChatId.value = chats.value[0].id
   }
 }
 
-function clearHistory() {
-  chatMessages.value = [
-    {
+function createNewChat() {
+  const num = chats.value.length + 1
+  const chat = {
+    id: generateChatId(),
+    title: 'Chat ' + num,
+    createdAt: Date.now(),
+    messages: [{
       role: 'assistant',
-      content: 'Chat history cleared. Hello again! I am ready to help you out :)',
-    },
-  ]
-  saveChatHistory()
+      content: 'New chat started. How can I help you?',
+    }],
+  }
+  chats.value.push(chat)
+  activeChatId.value = chat.id
+  chatInput.value = ''
+  saveChats()
 }
 
-watch(chatMessages, () => {
-  saveChatHistory()
-}, { deep: true })
+function switchChat(id) {
+  activeChatId.value = id
+  chatInput.value = ''
+}
+
+function deleteChat(id) {
+  if (chats.value.length <= 1) {
+    // Clear instead
+    const chat = chats.value[0]
+    chat.messages = [{ role: 'assistant', content: 'Chat cleared. Start a new conversation.' }]
+    saveChats()
+    return
+  }
+  const idx = chats.value.findIndex(c => c.id === id)
+  chats.value.splice(idx, 1)
+  if (activeChatId.value === id) {
+    activeChatId.value = chats.value[Math.min(idx, chats.value.length - 1)].id
+  }
+  saveChats()
+}
+
+function clearCurrentChat() {
+  if (activeChat.value) {
+    activeChat.value.messages = [{
+      role: 'assistant',
+      content: 'Chat cleared. Start a new conversation.',
+    }]
+    saveChats()
+  }
+}
+
+function renameChat(id) {
+  const chat = chats.value.find(c => c.id === id)
+  if (!chat) return
+  const name = prompt('Chat name:', chat.title)
+  if (name && name.trim()) {
+    chat.title = name.trim()
+    saveChats()
+  }
+}
+
+watch(chats, () => { saveChats() }, { deep: true })
+
+// Set default model from settings
+watch(aiSettings, (s) => {
+  if (!chatModel.value && getAllModels(s).length > 0) {
+    chatModel.value = s.primaryModel || getAllModels(s)[0]
+  }
+}, { immediate: true, deep: true })
 
 function refreshAiSettings() {
   aiSettings.value = loadAiSettings()
+  if (!chatModel.value && allModels.value.length > 0) {
+    chatModel.value = aiSettings.value.primaryModel || allModels.value[0]
+  }
 }
 
 function handleStorageChange(event) {
@@ -615,8 +696,8 @@ async function sendMessage() {
   try {
     const primaryPlan = await runChatCompletion(selectedModel.value, text)
     let finalPlan = primaryPlan
-    if (false) {
-      const secondPlan = null
+    if (aiSettings.value.useSecondModel && aiSettings.value.secondaryModel && aiSettings.value.secondaryModel !== chatModel.value) {
+      const secondPlan = await runChatCompletion(aiSettings.value.secondaryModel, text)
       finalPlan = mergePlans(primaryPlan, secondPlan)
     }
     if (!finalPlan) {
@@ -674,32 +755,51 @@ onBeforeUnmount(() => {
   <!-- Template unchanged – same as before -->
   <section class="assistant-page">
     <header class="assistant-head">
-      <h1>AI Task Assistant</h1>
-      <div class="header-actions">
-        <button class="clear-history-btn" @click="clearHistory">Clear History</button>
+      <div class="head-left">
+        <h1>AI Assistant</h1>
+        <button class="new-chat-btn" @click="createNewChat" title="New chat">+ New Chat</button>
       </div>
-      <p>Uses the AI server or API base configured in Settings. Auth and model selection are managed there.</p>
+      <div class="head-right">
+        <select v-model="chatModel" class="model-select">
+          <option value="">Select model</option>
+          <option v-for="m in allModels" :key="m" :value="m">{{ m }}</option>
+        </select>
+        <button class="clear-history-btn" @click="clearCurrentChat">Clear</button>
+      </div>
     </header>
 
-    <article class="panel chat">
-      <h2>Assistant Chat</h2>
-      <p class="hint">
-        Prompts are sent to your selected server. Example: <code>Create a task to prepare slides for Friday</code>,
-        <code>Zeige alle Aufgaben</code>, <code>Donne-moi un conseil pour aujourd'hui</code>
-      </p>
-      <p class="config-summary">
-        Server:
-        <code>{{ activeServerUrl || 'not configured' }}</code>
-        <span class="config-gap">
-          API:
-          <code>{{ activeApiBaseUrl || 'not configured' }}</code>
-        </span>
-        <span class="config-gap">
-          Primary model:
-          <code v-if="selectedModel">{{ selectedModel }}</code>
-          <span v-else>not selected</span>
-        </span>
-        <span v-if="false" class="config-gap">
+    <div class="chat-layout">
+      <!-- Sidebar: chat list -->
+      <aside class="chat-sidebar">
+        <div class="sidebar-header">
+          <span class="sidebar-title">Chats</span>
+        </div>
+        <div class="chat-list">
+          <div
+            v-for="chat in chats"
+            :key="chat.id"
+            class="chat-list-item"
+            :class="{ active: chat.id === activeChatId }"
+            @click="switchChat(chat.id)"
+          >
+            <span class="chat-title" @dblclick.stop="renameChat(chat.id)">{{ chat.title }}</span>
+            <button class="chat-delete" @click.stop="deleteChat(chat.id)" title="Delete chat">&times;</button>
+          </div>
+        </div>
+      </aside>
+
+      <!-- Main chat area -->
+      <article class="panel chat-main">
+        <p class="hint" style="margin-top: 0;">
+          Model: <strong>{{ chatModel || 'not selected' }}</strong>
+          &mdash; Prompts are sent to your configured AI server.
+          Examples: <code>Create a task to prepare slides for Friday</code>,
+          <code>Zeige alle Aufgaben</code>, <code>Donne-moi un conseil</code>
+        </p>
+      <p class="config-summary" style="font-size: 0.8em;">
+        Server: <code>{{ activeServerUrl || 'not configured' }}</code>
+        <span v-if="aiSettings.useSecondModel && aiSettings.secondaryModel && aiSettings.secondaryModel !== chatModel" class="config-gap">
+          + second model: <code>{{ aiSettings.secondaryModel }}</code>
         </span>
       </p>
       <div class="messages">
@@ -1008,4 +1108,136 @@ button {
 .danger-button:hover {
   background: #b71c1c;
 }
+
+/* ── Multi-chat sidebar ───────────────────────────────────────────────────── */
+.chat-layout {
+  display: flex;
+  gap: 12px;
+  height: calc(100vh - 200px);
+  min-height: 400px;
+}
+.chat-sidebar {
+  width: 200px;
+  min-width: 160px;
+  background: var(--surface, #f5f5f5);
+  border: 1px solid var(--border, #ddd);
+  border-radius: 8px;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+.sidebar-header {
+  padding: 10px 12px;
+  border-bottom: 1px solid var(--border, #ddd);
+  font-weight: 600;
+  font-size: 0.85em;
+}
+.chat-list {
+  flex: 1;
+  overflow-y: auto;
+  padding: 4px;
+}
+.chat-list-item {
+  display: flex;
+  align-items: center;
+  justify-content: space-between;
+  padding: 8px 10px;
+  border-radius: 6px;
+  cursor: pointer;
+  font-size: 0.85em;
+  margin-bottom: 2px;
+  transition: background 0.15s;
+}
+.chat-list-item:hover {
+  background: var(--surface-strong, #e8e8e8);
+}
+.chat-list-item.active {
+  background: var(--accent-soft, #cce9f5);
+  font-weight: 600;
+}
+.chat-title {
+  flex: 1;
+  overflow: hidden;
+  text-overflow: ellipsis;
+  white-space: nowrap;
+}
+.chat-delete {
+  background: none;
+  border: none;
+  color: #d32f2f;
+  cursor: pointer;
+  font-size: 1.1em;
+  padding: 0 2px;
+  opacity: 0;
+  transition: opacity 0.15s;
+}
+.chat-list-item:hover .chat-delete {
+  opacity: 1;
+}
+.chat-main {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+}
+
+/* ── Header with model selector ──────────────────────────────────────────── */
+.assistant-head {
+  display: flex;
+  justify-content: space-between;
+  align-items: center;
+  flex-wrap: wrap;
+  gap: 8px;
+  margin-bottom: 12px;
+}
+.head-left {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+}
+.head-left h1 {
+  margin: 0;
+  font-size: 1.3em;
+}
+.head-right {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+}
+.new-chat-btn {
+  padding: 5px 14px;
+  background: var(--accent, #0077B6);
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 600;
+  font-size: 0.85em;
+  white-space: nowrap;
+}
+.new-chat-btn:hover {
+  opacity: 0.9;
+}
+.model-select {
+  padding: 5px 10px;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 5px;
+  background: var(--surface, #fff);
+  color: var(--text, #333);
+  font-size: 0.85em;
+  min-width: 160px;
+}
+.clear-history-btn {
+  padding: 5px 12px;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 5px;
+  background: var(--surface, #fff);
+  color: var(--text, #333);
+  cursor: pointer;
+  font-size: 0.85em;
+}
+.clear-history-btn:hover {
+  background: var(--surface-strong, #eee);
+}
+
 </style>

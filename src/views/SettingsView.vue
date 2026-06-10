@@ -1,11 +1,12 @@
 <script setup>
 import { computed, ref, watch, onMounted, onUnmounted } from "vue";
 import {
-  PROVIDER_PRESETS,
   buildModelsEndpointCandidates,
-  getActiveProvider,
-  getProviderModels,
+  buildModelsEndpointCandidatesForUrl,
+  getAllModels,
+  getActiveConfig,
   loadAiSettings,
+  normalizeAiSettings,
   parseModels,
   saveAiSettings,
 } from "@/utils/aiSettings";
@@ -246,142 +247,137 @@ function removeWallpaper() {
 }
 
 const form = ref(loadAiSettings());
-const modelsLoading = ref({});
-const connectionStatus = ref("");
-const editingProviderId = ref(null);
-const newProviderPreset = ref("openai");
+const modelsLoading = ref(false);
+const epModelsLoading = ref({});
+const statusMsg = ref("");
+const newEpLabel = ref("");
+const newEpUrl = ref("");
+const newEpKey = ref("");
+const customModelInput = ref("");
 
-function getProviderName(presetId) {
-  const preset = PROVIDER_PRESETS.find(p => p.id === presetId);
-  return preset ? preset.name : "Custom";
+function activeServer() {
+  return form.value.useDefaultServer ? form.value.defaultServer : form.value.customServer;
 }
 
-function providerBaseUrl(presetId) {
-  const preset = PROVIDER_PRESETS.find(p => p.id === presetId);
-  return preset ? preset.baseUrl : "";
+function allModels() {
+  return getAllModels(form.value);
 }
 
-function addProvider() {
-  const preset = PROVIDER_PRESETS.find(p => p.id === newProviderPreset.value);
-  const newProv = {
-    id: "prov_" + Math.random().toString(36).substring(2, 8),
-    preset: preset.id,
-    name: preset ? preset.name : "Custom",
-    baseUrl: preset ? preset.baseUrl : "",
-    apiKey: "",
-    model: preset && preset.models.length > 0 ? preset.models[0] : "",
-    customModels: [],
-    _customModelInput: "",
-  };
-  form.value.providers.push(newProv);
-  if (!form.value.activeProviderId) {
-    form.value.activeProviderId = newProv.id;
-  }
+function addApiEndpoint() {
+  const srv = activeServer();
+  if (!srv.apikeys) srv.apikeys = [];
+  srv.apikeys.push({
+    id: "ep_" + Math.random().toString(36).substring(2, 8),
+    url: newEpUrl.value.trim(),
+    key: newEpKey.value.trim(),
+    label: newEpLabel.value.trim() || "API #" + (srv.apikeys.length + 1),
+    models: [],
+  });
+  newEpUrl.value = "";
+  newEpKey.value = "";
+  newEpLabel.value = "";
   saveAiSettings(form.value);
 }
 
-function removeProvider(id) {
-  const idx = form.value.providers.findIndex(p => p.id === id);
-  if (idx === -1) return;
-  form.value.providers.splice(idx, 1);
-  if (form.value.activeProviderId === id) {
-    form.value.activeProviderId = form.value.providers[0]?.id || null;
-  }
+function removeApiEndpoint(id) {
+  const srv = activeServer();
+  srv.apikeys = (srv.apikeys || []).filter(a => a.id !== id);
   saveAiSettings(form.value);
 }
 
-function setActiveProvider(id) {
-  form.value.activeProviderId = id;
+function addCustomModel() {
+  const name = customModelInput.value.trim();
+  if (!name) return;
+  const srv = activeServer();
+  if (!srv.customModels) srv.customModels = [];
+  if (!srv.customModels.includes(name)) {
+    srv.customModels.push(name);
+  }
+  if (!form.value.primaryModel) form.value.primaryModel = name;
+  customModelInput.value = "";
   saveAiSettings(form.value);
 }
 
-function availableModels(provider) {
-  return getProviderModels(provider);
+function removeCustomModel(name) {
+  const srv = activeServer();
+  srv.customModels = (srv.customModels || []).filter(m => m !== name);
+  if (form.value.primaryModel === name) form.value.primaryModel = "";
+  if (form.value.secondaryModel === name) form.value.secondaryModel = "";
+  saveAiSettings(form.value);
 }
 
-async function loadModelsForProvider(provider) {
-  if (!provider || !provider.baseUrl) {
-    connectionStatus.value = "Configure the base URL first.";
-    return;
-  }
+async function loadModels() {
+  const srv = activeServer();
+  if (!srv.baseUrl) { statusMsg.value = "Set a base URL first."; return; }
 
-  modelsLoading.value[provider.id] = true;
-  connectionStatus.value = "Loading models for " + provider.name + "...";
+  modelsLoading.value = true;
+  statusMsg.value = "Loading models...";
+  const headers = {};
+  if (srv.apiKey) headers.Authorization = "Bearer " + srv.apiKey;
 
   try {
-    const headers = {};
-    if (provider.apiKey) {
-      headers.Authorization = "Bearer " + provider.apiKey;
-    }
-
-    const urls = buildModelsEndpointCandidates(provider.baseUrl);
-    let payload = null;
-    let lastError = null;
-
+    const urls = buildModelsEndpointCandidates(srv.baseUrl);
+    let payload = null, lastErr = null;
     for (const url of urls) {
       try {
         const resp = await fetch(url, { method: "GET", headers });
-        if (resp.ok) {
-          payload = await resp.json();
-          break;
-        } else {
-          lastError = new Error(await resp.text());
-        }
-      } catch (e) {
-        lastError = e;
-      }
+        if (resp.ok) { payload = await resp.json(); break; }
+        else { lastErr = new Error(await resp.text()); }
+      } catch (e) { lastErr = e; }
     }
 
     if (payload) {
       const loaded = parseModels(payload);
-      provider.customModels = [...new Set([...(provider.customModels || []), ...loaded])];
-      if (!provider.model && loaded.length > 0) {
-        provider.model = loaded[0];
-      }
-      connectionStatus.value = "Loaded " + loaded.length + " model(s) for " + provider.name;
+      srv.models = [...new Set([...loaded])];
+      if (!form.value.primaryModel && loaded.length > 0) form.value.primaryModel = loaded[0];
+      statusMsg.value = "Loaded " + loaded.length + " model(s).";
     } else {
-      connectionStatus.value = "Could not reach " + provider.baseUrl + ": " + (lastError?.message || "unknown error");
+      statusMsg.value = "Could not reach " + srv.baseUrl + ": " + (lastErr?.message || "unknown error");
     }
-  } catch (error) {
-    connectionStatus.value = "Failed: " + error.message;
+  } catch (err) {
+    statusMsg.value = "Failed: " + err.message;
   } finally {
-    modelsLoading.value[provider.id] = false;
+    modelsLoading.value = false;
     saveAiSettings(form.value);
   }
 }
 
-function onPresetChange(provider) {
-  const preset = PROVIDER_PRESETS.find(p => p.id === provider.preset);
-  if (preset) {
-    provider.name = preset.name;
-    if (!provider.baseUrl || provider.baseUrl === "") {
-      provider.baseUrl = preset.baseUrl;
+async function loadModelsForEp(ep) {
+  if (!ep || !ep.url) return;
+  epModelsLoading.value[ep.id] = true;
+  const headers = {};
+  if (ep.key) headers.Authorization = "Bearer " + ep.key;
+
+  try {
+    const urls = buildModelsEndpointCandidatesForUrl(ep.url);
+    let payload = null, lastErr = null;
+    for (const url of urls) {
+      try {
+        const resp = await fetch(url, { method: "GET", headers });
+        if (resp.ok) { payload = await resp.json(); break; }
+        else { lastErr = new Error(await resp.text()); }
+      } catch (e) { lastErr = e; }
     }
-    if (!provider.model && preset.models.length > 0) {
-      provider.model = preset.models[0];
+    if (payload) {
+      const loaded = parseModels(payload);
+      ep.models = [...new Set([...loaded])];
+      statusMsg.value = "Loaded " + loaded.length + " model(s).";
+    } else {
+      statusMsg.value = "Error: " + (lastErr?.message || "unknown");
     }
+  } catch (err) {
+    statusMsg.value = "Failed: " + err.message;
+  } finally {
+    epModelsLoading.value[ep.id] = false;
+    saveAiSettings(form.value);
   }
 }
 
-function addCustomModel(provider) {
-  const name = (provider._customModelInput || "").trim();
-  if (!name) return;
-  if (!provider.customModels) provider.customModels = [];
-  if (!provider.customModels.includes(name)) {
-    provider.customModels.push(name);
-  }
-  provider.model = name;
-  provider._customModelInput = "";
-  saveAiSettings(form.value);
-}
-
-// Add _customModelInput to existing providers on load
-function initCustomInputs() {
-  form.value.providers.forEach(p => {
-    if (!p._customModelInput) p._customModelInput = "";
-  });
-}
-initCustomInputs();
+watch(
+  form,
+  (val) => { saveAiSettings(val); },
+  { deep: true },
+);
 
 // Auto-deletion: stored in minutes
 const autoDeleteMinutes = ref(getAutoDeleteMinutes());
@@ -685,150 +681,148 @@ async function exportAsCsv() {
       <p>Settings are saved automatically in this browser.</p>
     </header>
 
-    <div class="settings-grid">
-      <!-- AI Providers -->
+    <div class="settings-grid" style="overflow-y: auto; max-height: calc(100vh - 120px); padding-bottom: 40px;">
+      <!-- AI Server & Models -->
       <article class="panel">
-        <h2>AI Providers</h2>
+        <h2>AI Server & Models</h2>
+
+        <!-- Profile toggle -->
+        <label class="toggle">
+          <input v-model="form.useDefaultServer" type="checkbox" />
+          <span>Use default server</span>
+        </label>
+
         <p class="hint">
-          Add multiple AI providers (OpenAI, DeepSeek, Anthropic, Google, Ollama, etc.),
-          each with its own API key and model. The active provider is used by the AI assistant.
+          Two server profiles — default and custom. Toggle the checkbox to switch.
+          Each profile has its own URL, API key, additional API endpoints, and models.
         </p>
 
-        <!-- Add provider bar -->
-        <div class="add-provider-row">
-          <select v-model="newProviderPreset" class="preset-select">
-            <option v-for="p in PROVIDER_PRESETS" :key="p.id" :value="p.id">
-              {{ p.name }}
-            </option>
-          </select>
-          <button class="btn-add" @click="addProvider">+ Add Provider</button>
+        <!-- Profile selector tabs -->
+        <div class="server-tabs">
+          <button
+            class="tab-btn"
+            :class="{ active: form.useDefaultServer }"
+            @click="form.useDefaultServer = true"
+          >Default Server</button>
+          <button
+            class="tab-btn"
+            :class="{ active: !form.useDefaultServer }"
+            @click="form.useDefaultServer = false"
+          >Custom Server</button>
         </div>
 
-        <!-- Provider list -->
+        <!-- Active server config -->
+        <div class="server-config">
+          <div class="row">
+            <label>Base URL</label>
+            <input
+              v-model="activeServer().baseUrl"
+              type="url"
+              placeholder="https://api.openai.com/v1"
+            />
+          </div>
+          <div class="row">
+            <label>API Key</label>
+            <input
+              v-model="activeServer().apiKey"
+              type="password"
+              placeholder="sk-..."
+              autocomplete="off"
+            />
+          </div>
+
+          <!-- Load models from base URL -->
+          <div class="actions">
+            <button :disabled="modelsLoading" @click="loadModels">
+              {{ modelsLoading ? "Loading..." : "Load Models from Base URL" }}
+            </button>
+          </div>
+        </div>
+
+        <!-- Additional API endpoints -->
+        <h3 style="margin-top: 16px; font-size: 0.95em; color: var(--text-muted, #888);">
+          Additional API Endpoints
+        </h3>
+        <p class="hint">
+          Add extra API endpoints to combine their models into the main selector.
+        </p>
+
         <div
-          v-for="(provider, idx) in form.providers"
-          :key="provider.id"
-          class="provider-card"
-          :class="{ active: provider.id === form.activeProviderId }"
+          v-for="ep in activeServer().apikeys"
+          :key="ep.id"
+          class="ep-card"
         >
-          <div class="provider-header">
-            <div class="provider-name-row">
-              <span class="provider-badge" :class="provider.preset">
-                {{ getProviderName(provider.preset) }}
-              </span>
-              <span v-if="provider.id === form.activeProviderId" class="active-tag">ACTIVE</span>
-              <span class="provider-model-tag">{{ provider.model || "No model" }}</span>
-            </div>
-            <div class="provider-actions">
-              <button
-                v-if="provider.id !== form.activeProviderId"
-                class="btn-small btn-activate"
-                @click="setActiveProvider(provider.id)"
-                title="Set as active provider"
-              >
-                Set Active
-              </button>
-              <button
-                class="btn-small btn-danger"
-                @click="removeProvider(provider.id)"
-                title="Remove this provider"
-                :disabled="form.providers.length <= 1"
-              >
-                Delete
-              </button>
-            </div>
+          <div class="ep-header">
+            <strong>{{ ep.label }}</strong>
+            <button class="btn-small btn-danger" @click="removeApiEndpoint(ep.id)">Remove</button>
           </div>
-
-          <div class="provider-details">
-            <!-- Preset -->
-            <div class="row">
-              <label>Type</label>
-              <select v-model="provider.preset" @change="onPresetChange(provider)">
-                <option v-for="p in PROVIDER_PRESETS" :key="p.id" :value="p.id">
-                  {{ p.name }}
-                </option>
-              </select>
-            </div>
-
-            <!-- Name -->
-            <div class="row">
-              <label>Provider name</label>
-              <input v-model="provider.name" type="text" placeholder="My Provider" />
-            </div>
-
-            <!-- Base URL -->
-            <div class="row">
-              <label>API Base URL</label>
-              <input
-                v-model="provider.baseUrl"
-                type="url"
-                placeholder="https://api.deepseek.com"
-              />
-            </div>
-
-            <!-- API Key -->
-            <div class="row">
-              <label>API Key</label>
-              <input
-                v-model="provider.apiKey"
-                type="password"
-                placeholder="sk-..."
-                autocomplete="off"
-              />
-            </div>
-
-            <!-- Model selection -->
-            <div class="row">
-              <label>Model</label>
-              <select v-model="provider.model">
-                <option value="">Select a model</option>
-                <option
-                  v-for="m in availableModels(provider)"
-                  :key="m"
-                  :value="m"
-                >
-                  {{ m }}
-                </option>
-              </select>
-            </div>
-
-            <!-- Manual model input -->
-            <div class="row" style="margin-top: 4px;">
-              <label>Custom model name</label>
-              <div class="inline-row">
-                <input
-                  v-model="provider._customModelInput"
-                  type="text"
-                  placeholder="Type a model name and press Enter"
-                  @keydown.enter.prevent="addCustomModel(provider)"
-                />
-                <button
-                  class="btn-small btn-add-model"
-                  @click="addCustomModel(provider)"
-                  :disabled="!provider._customModelInput?.trim()"
-                >
-                  Add
-                </button>
-              </div>
-            </div>
-
-            <!-- Load models from endpoint -->
-            <div class="actions" style="margin-top: 8px;">
-              <button
-                :disabled="modelsLoading[provider.id]"
-                @click="loadModelsForProvider(provider)"
-              >
-                {{ modelsLoading[provider.id] ? "Loading..." : "Load Models from Endpoint" }}
-              </button>
-            </div>
+          <div class="ep-detail">{{ ep.url }}</div>
+          <div class="actions" style="margin-top: 4px;">
+            <button
+              class="btn-small"
+              :disabled="epModelsLoading[ep.id]"
+              @click="loadModelsForEp(ep)"
+            >
+              {{ epModelsLoading[ep.id] ? "Loading..." : "Load Models" }}
+            </button>
+          </div>
+          <div v-if="ep.models.length" class="ep-models">
+            Models: {{ ep.models.join(", ") }}
           </div>
         </div>
 
-        <div v-if="form.providers.length === 0" class="empty-state">
-          No providers configured. Add one above.
+        <!-- Add endpoint form -->
+        <div class="add-ep-row">
+          <input v-model="newEpLabel" type="text" placeholder="Label (e.g. DeepSeek Chat)" />
+          <input v-model="newEpUrl" type="url" placeholder="https://api.deepseek.com" />
+          <input v-model="newEpKey" type="password" placeholder="API key (optional)" autocomplete="off" />
+          <button class="btn-small btn-add" @click="addApiEndpoint" :disabled="!newEpUrl.trim()">+ Add</button>
         </div>
 
-        <p class="status" v-if="connectionStatus">{{ connectionStatus }}</p>
+        <!-- Custom models (manual add) -->
+        <h3 style="margin-top: 16px; font-size: 0.95em; color: var(--text-muted, #888);">
+          Custom Models
+        </h3>
+
+        <div class="inline-row" style="margin-bottom: 8px;">
+          <input v-model="customModelInput" type="text" placeholder="Type model name and press Enter"
+            @keydown.enter.prevent="addCustomModel" />
+          <button class="btn-small btn-add-model" @click="addCustomModel" :disabled="!customModelInput.trim()">Add</button>
+        </div>
+
+        <div class="model-chips">
+          <span v-for="m in allModels()" :key="m" class="model-chip">
+            {{ m }}
+            <button class="chip-remove" @click="removeCustomModel(m)" title="Remove">&times;</button>
+          </span>
+          <span v-if="allModels().length === 0" style="color: #999; font-size: 0.85em;">
+            No models yet. Load from endpoint or add manually.
+          </span>
+        </div>
+
+        <!-- Primary & secondary model selectors -->
+        <div class="row" style="margin-top: 16px;">
+          <label>Primary model</label>
+          <select v-model="form.primaryModel">
+            <option value="">Select a model</option>
+            <option v-for="m in allModels()" :key="m" :value="m">{{ m }}</option>
+          </select>
+        </div>
+
+        <label class="toggle">
+          <input v-model="form.useSecondModel" type="checkbox" />
+          <span>Combine with second model for higher accuracy</span>
+        </label>
+
+        <div v-if="form.useSecondModel" class="row">
+          <label>Secondary model</label>
+          <select v-model="form.secondaryModel">
+            <option value="">Select a model</option>
+            <option v-for="m in allModels()" :key="m" :value="m">{{ m }}</option>
+          </select>
+        </div>
+
+        <p class="status" v-if="statusMsg" style="margin-top: 8px;">{{ statusMsg }}</p>
       </article>
 
       <!-- Appearance -->
