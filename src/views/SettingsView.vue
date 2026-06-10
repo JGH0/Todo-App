@@ -244,128 +244,90 @@ function removeWallpaper() {
 }
 
 const form = ref(loadAiSettings());
-const modelsLoading = ref(false);
-const epModelsLoading = ref({});
+const modelsLoading = ref({});
 const statusMsg = ref("");
-const newEpLabel = ref("");
-const newEpUrl = ref("");
-const newEpKey = ref("");
+const newProvName = ref("");
+const newProvUrl = ref("");
+const newProvKey = ref("");
 const customModelInput = ref("");
+const selectedProviderIdx = ref(null);
 
-function activeServer() {
-  return form.value.useDefaultServer ? form.value.defaultServer : form.value.customServer;
-}
 
 function allModels() {
   return getAllModels(form.value);
 }
 
-function addApiEndpoint() {
-  const srv = activeServer();
-  if (!srv.apikeys) srv.apikeys = [];
-  srv.apikeys.push({
-    id: "ep_" + Math.random().toString(36).substring(2, 8),
-    url: newEpUrl.value.trim(),
-    key: newEpKey.value.trim(),
-    label: newEpLabel.value.trim() || "API #" + (srv.apikeys.length + 1),
+function addProvider() {
+  form.value.providers.push({
+    id: "prov_" + Math.random().toString(36).substring(2, 8),
+    name: newProvName.value.trim() || "Provider #" + (form.value.providers.length + 1),
+    baseUrl: newProvUrl.value.trim(),
+    apiKey: newProvKey.value.trim(),
     models: [],
+    customModels: [],
   });
-  newEpUrl.value = "";
-  newEpKey.value = "";
-  newEpLabel.value = "";
+  newProvName.value = "";
+  newProvUrl.value = "";
+  newProvKey.value = "";
   saveAiSettings(form.value);
 }
 
-function removeApiEndpoint(id) {
-  const srv = activeServer();
-  srv.apikeys = (srv.apikeys || []).filter(a => a.id !== id);
+function removeProvider(id) {
+  if (form.value.providers.length <= 1) return;
+  form.value.providers = form.value.providers.filter(p => p.id !== id);
   saveAiSettings(form.value);
 }
 
 function addCustomModel() {
   const name = customModelInput.value.trim();
-  if (!name) return;
-  const srv = activeServer();
-  if (!srv.customModels) srv.customModels = [];
-  if (!srv.customModels.includes(name)) {
-    srv.customModels.push(name);
-  }
+  if (!name || selectedProviderIdx.value === null) return;
+  const prov = form.value.providers[selectedProviderIdx.value];
+  if (!prov) return;
+  if (!prov.customModels) prov.customModels = [];
+  if (!prov.customModels.includes(name)) prov.customModels.push(name);
   if (!form.value.primaryModel) form.value.primaryModel = name;
   customModelInput.value = "";
   saveAiSettings(form.value);
 }
 
-function removeCustomModel(name) {
-  const srv = activeServer();
-  srv.customModels = (srv.customModels || []).filter(m => m !== name);
-  if (form.value.primaryModel === name) form.value.primaryModel = "";
-  if (form.value.secondaryModel === name) form.value.secondaryModel = "";
+function removeCustomModel(provId, name) {
+  const prov = form.value.providers.find(p => p.id === provId);
+  if (!prov) return;
+  prov.customModels = (prov.customModels || []).filter(m => m !== name);
   saveAiSettings(form.value);
 }
 
-async function loadModels() {
-  const srv = activeServer();
-  if (!srv.baseUrl) { statusMsg.value = "Set a base URL first."; return; }
-
-  modelsLoading.value = true;
-  statusMsg.value = "Loading models...";
+async function loadModelsFor(prov) {
+  if (!prov || !prov.baseUrl) { statusMsg.value = "Set a URL first."; return; }
+  modelsLoading.value[prov.id] = true;
+  statusMsg.value = "Loading models for " + prov.name + "...";
   const headers = {};
-  if (srv.apiKey) headers.Authorization = "Bearer " + srv.apiKey;
+  if (prov.apiKey) headers.Authorization = "Bearer " + prov.apiKey;
 
   try {
-    const urls = buildModelsEndpointCandidates(srv.baseUrl);
+    const urls = buildModelsEndpointCandidates(prov.baseUrl);
     let payload = null, lastErr = null;
     for (const url of urls) {
       try {
         const resp = await fetch(url, { method: "GET", headers });
         if (resp.ok) { payload = await resp.json(); break; }
-        else { lastErr = new Error(await resp.text()); }
-      } catch (e) { lastErr = e; }
-    }
-
-    if (payload) {
-      const loaded = parseModels(payload);
-      srv.models = [...new Set([...loaded])];
-      if (!form.value.primaryModel && loaded.length > 0) form.value.primaryModel = loaded[0];
-      statusMsg.value = "Loaded " + loaded.length + " model(s).";
-    } else {
-      statusMsg.value = "Could not reach " + srv.baseUrl + ": " + (lastErr?.message || "unknown error");
-    }
-  } catch (err) {
-    statusMsg.value = "Failed: " + err.message;
-  } finally {
-    modelsLoading.value = false;
-    saveAiSettings(form.value);
-  }
-}
-
-async function loadModelsForEp(ep) {
-  if (!ep || !ep.url) return;
-  epModelsLoading.value[ep.id] = true;
-  const headers = {};
-  if (ep.key) headers.Authorization = "Bearer " + ep.key;
-
-  try {
-    const urls = buildModelsEndpointCandidatesForUrl(ep.url);
-    let payload = null, lastErr = null;
-    for (const url of urls) {
-      try {
-        const resp = await fetch(url, { method: "GET", headers });
-        if (resp.ok) { payload = await resp.json(); break; }
-        else { lastErr = new Error(await resp.text()); }
+        else {
+          const txt = await resp.text();
+          lastErr = new Error(txt || "HTTP " + resp.status);
+        }
       } catch (e) { lastErr = e; }
     }
     if (payload) {
       const loaded = parseModels(payload);
-      ep.models = [...new Set([...loaded])];
-      statusMsg.value = "Loaded " + loaded.length + " model(s).";
+      prov.models = [...new Set([...loaded])];
+      statusMsg.value = "Loaded " + loaded.length + " model(s) for " + prov.name + ".";
     } else {
-      statusMsg.value = "Error: " + (lastErr?.message || "unknown");
+      statusMsg.value = "Could not reach " + prov.baseUrl + ": " + (lastErr?.message || "unknown error");
     }
   } catch (err) {
     statusMsg.value = "Failed: " + err.message;
   } finally {
-    epModelsLoading.value[ep.id] = false;
+    modelsLoading.value[prov.id] = false;
     saveAiSettings(form.value);
   }
 }
