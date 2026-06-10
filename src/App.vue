@@ -136,8 +136,11 @@ function toggleLoginMode() {
 							id="login-password"
 							v-model="loginPassword"
 							type="password"
-							placeholder="Your password"
+							:placeholder="loginMode === 'register' ? 'At least 8 characters' : 'Your password'"
 						/>
+						<small v-if="loginMode === 'register'" class="hint">
+							Minimum 8 characters required
+						</small>
 					</div>
 
 					<p v-if="loginError" class="error">{{ loginError }}</p>
@@ -788,4 +791,10 @@ export default {
 		padding-top: 16px;
 	}
 }
+	.hint {
+		display: block;
+		color: #888;
+		font-size: 0.8em;
+		margin-top: 4px;
+	}
 </style>
