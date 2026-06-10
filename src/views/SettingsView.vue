@@ -453,9 +453,6 @@ onUnmounted(() => {
   window.removeEventListener("storage", handleStorage);
 });
 
-function activeProvider() {
-  return form.value.providers.find(p => p.id === form.value.activeProviderId) || form.value.providers[0] || null;
-}
 
 watch(
   form,
@@ -465,27 +462,6 @@ watch(
   { deep: true },
 );
 
-watch(activeEndpointSignature, (next, previous) => {
-  if (!previous || previous === next) return;
-
-  form.value.models = [];
-  form.value.primaryModel = "";
-  form.value.secondaryModel = "";
-  connectionStatus.value = activeConfig.value.requestBaseUrl
-    ? "Connection target changed. Load models for this profile."
-    : "Configure the active server URL or API base URL to load models.";
-});
-
-watch(
-  () => form.value.primaryModel,
-  () => {
-    if (
-      form.value.useSecondModel &&
-      form.value.models.length > 1 &&
-      form.value.secondaryModel === form.value.primaryModel
-    ) {
-      form.value.secondaryModel = getPreferredSecondaryModel();
-    }
   },
 );
 
