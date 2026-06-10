@@ -32,6 +32,19 @@ async function handleLogin() {
 
 	try {
 		if (loginMode.value === "register") {
+			// Client-side validation before sending
+			if (!registerName.value.trim()) {
+				loginError.value = "Name is required";
+				return;
+			}
+			if (!loginEmail.value.trim()) {
+				loginError.value = "Email is required";
+				return;
+			}
+			if (loginPassword.value.length < 8) {
+				loginError.value = "Password needs at least 8 characters";
+				return;
+			}
 			const result = await register({
 				email: loginEmail.value,
 				password: loginPassword.value,

@@ -55,7 +55,7 @@ export function getBackendPresetId(url) {
 const THEME_STORE_URL_KEY = "todo-app.theme-store-url";
 
 export const DEFAULT_THEME_STORE_URL =
-  "http://localhost:8080/index.php";
+  "/index.php";
 
 export function loadThemeStoreUrl() {
   return localStorage.getItem(THEME_STORE_URL_KEY) || DEFAULT_THEME_STORE_URL;
