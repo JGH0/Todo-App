@@ -3,6 +3,8 @@ import { computed, onBeforeUnmount, onMounted, ref, watch } from 'vue'
 import {
   AI_SETTINGS_EVENT,
   AI_SETTINGS_STORAGE_KEY,
+  buildOllamaChatEndpointCandidates,
+  buildOpenAiChatEndpointCandidates,
   findProviderForModel,
   getAllModels,
   getActiveAiConfig,
@@ -443,7 +445,7 @@ async function runChatCompletion(modelId, userText) {
     temperature: 0.2,
   }
   try {
-    const payload = await requestJson(buildOpenAiChatEndpointCandidates(activeApiBaseUrl.value), {
+    const payload = await requestJson(buildOpenAiChatEndpointCandidates(baseUrl), {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify(openAiCompatibleBody),
@@ -452,7 +454,7 @@ async function runChatCompletion(modelId, userText) {
     console.log('AI raw response:', content)
     return extractJsonObject(content)
   } catch {
-    const payload = await requestJson(buildOllamaChatEndpointCandidates(activeApiBaseUrl.value), {
+    const payload = await requestJson(buildOllamaChatEndpointCandidates(baseUrl), {
       method: 'POST',
       headers: authHeaders(),
       body: JSON.stringify({
