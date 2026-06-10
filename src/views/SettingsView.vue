@@ -257,6 +257,52 @@ function allModels() {
   return getAllModels(form.value);
 }
 
+function providerModels(idx) {
+  const prov = form.value.providers[idx]
+  if (!prov) return []
+  return [...new Set([...prov.models, ...(prov.customModels||[])])]
+}
+
+function labeledModels() {
+  const seen = {}
+  const result = []
+  for (const prov of form.value.providers) {
+    for (const m of [...(prov.models||[]), ...(prov.customModels||[])]) {
+      if (!seen[m]) {
+        seen[m] = true
+        result.push({ val: m, label: m + ' (' + prov.name + ')' })
+      } else {
+        // Already seen from another provider — add source label
+        result.push({ val: m, label: m + ' (' + prov.name + ')' })
+      }
+    }
+  }
+  return result
+}
+
+const showAddForm = ref(false)
+const showDeleteModal = ref(false)
+const deletingProviderIdx = ref(null)
+const deletingProviderName = ref("")
+
+function confirmRemoveProvider(idx) {
+  deletingProviderIdx.value = idx
+  deletingProviderName.value = form.value.providers[idx]?.name || ""
+  showDeleteModal.value = true
+}
+
+function doRemoveProvider() {
+  const idx = deletingProviderIdx.value
+  if (idx === null || form.value.providers.length <= 1) return
+  form.value.providers.splice(idx, 1)
+  if (selectedProviderIdx.value >= form.value.providers.length) {
+    selectedProviderIdx.value = form.value.providers.length - 1
+  }
+  showDeleteModal.value = false
+  deletingProviderIdx.value = null
+  saveAiSettings(form.value)
+}
+
 function addProvider() {
   form.value.providers.push({
     id: "prov_" + Math.random().toString(36).substring(2, 8),
@@ -618,76 +664,83 @@ async function exportAsCsv() {
       <article class="panel">
         <h2>AI Providers</h2>
         <p class="hint">
-          Add as many AI providers as you want (OpenAI, DeepSeek, Anthropic, Google, Ollama...).
-          Each has its own URL, API key, and models. All models from all providers
-          are shown in the model selectors below.
+          Each tab is an AI provider (OpenAI, DeepSeek, Anthropic, Google, Ollama...).
+          Click + to add a new provider. Close a tab to remove it.
+          All models are shown in the model selectors below with their source.
         </p>
 
-        <!-- Add provider form -->
-        <div class="add-provider-row">
-          <input v-model="newProvName" type="text" placeholder="Provider name (e.g. OpenAI)" />
-          <input v-model="newProvUrl" type="url" placeholder="https://api.openai.com/v1" />
-          <input v-model="newProvKey" type="password" placeholder="API key (optional)" autocomplete="off" />
-          <button class="btn-add" @click="addProvider" :disabled="!newProvUrl.trim()">+ Add</button>
+        <!-- Tab bar -->
+        <div class="provider-tabs">
+          <button
+            v-for="(prov, idx) in form.providers"
+            :key="prov.id"
+            class="tab-btn"
+            :class="{ active: selectedProviderIdx === idx }"
+            @click="selectedProviderIdx = idx"
+          >
+            <span class="tab-label">{{ prov.name }}</span>
+            <span
+              class="tab-close"
+              @click.stop="confirmRemoveProvider(idx)"
+              title="Remove provider"
+            >&times;</span>
+          </button>
+          <button class="tab-btn tab-add" @click="showAddForm = !showAddForm" title="Add provider">+</button>
         </div>
 
-        <!-- Provider cards -->
-        <div
-          v-for="(prov, idx) in form.providers"
-          :key="prov.id"
-          class="provider-card"
-          :class="{ active: selectedProviderIdx === idx }"
-          @click="selectedProviderIdx = idx"
-        >
-          <div class="provider-header">
-            <strong>{{ prov.name }}</strong>
-            <button class="btn-small btn-danger" @click="removeProvider(prov.id)" :disabled="form.providers.length <= 1">Remove</button>
+        <!-- Add provider form (collapsible) -->
+        <div v-if="showAddForm" class="add-provider-form">
+          <div class="inline-row">
+            <input v-model="newProvName" type="text" placeholder="Name (e.g. DeepSeek)" />
+            <input v-model="newProvUrl" type="url" placeholder="https://api.deepseek.com" />
+            <input v-model="newProvKey" type="password" placeholder="API key" autocomplete="off" />
+            <button class="btn-add" @click="addProvider" :disabled="!newProvUrl.trim() || !newProvName.trim()">Add</button>
           </div>
+        </div>
 
+        <!-- Active provider config -->
+        <div v-if="form.providers[selectedProviderIdx]" class="provider-config">
+          <div class="row">
+            <label>Name</label>
+            <input v-model="form.providers[selectedProviderIdx].name" type="text" />
+          </div>
           <div class="row">
             <label>Base URL</label>
-            <input v-model="prov.baseUrl" type="url" placeholder="https://api.openai.com/v1" />
+            <input v-model="form.providers[selectedProviderIdx].baseUrl" type="url" placeholder="https://api.openai.com/v1" />
           </div>
           <div class="row">
             <label>API Key</label>
-            <input v-model="prov.apiKey" type="password" placeholder="sk-..." autocomplete="off" />
+            <input v-model="form.providers[selectedProviderIdx].apiKey" type="password" placeholder="sk-..." autocomplete="off" />
           </div>
 
-          <!-- Load models -->
-          <div class="actions" style="margin: 6px 0;">
-            <button :disabled="modelsLoading[prov.id]" @click="loadModelsFor(prov)">
-              {{ modelsLoading[prov.id] ? "Loading..." : "Load Models" }}
+          <div class="actions" style="margin: 8px 0;">
+            <button :disabled="modelsLoading[form.providers[selectedProviderIdx].id]" @click="loadModelsFor(form.providers[selectedProviderIdx])">
+              {{ modelsLoading[form.providers[selectedProviderIdx].id] ? "Loading..." : "Load Models" }}
             </button>
           </div>
 
-          <!-- Show models for this provider -->
-          <div v-if="prov.models.length || prov.customModels.length" class="prov-models">
-            Models:
-            <span v-for="m in [...new Set([...prov.models, ...(prov.customModels||[])])]" :key="m" class="model-chip">
+          <div class="prov-models" v-if="providerModels(selectedProviderIdx).length">
+            <span v-for="m in providerModels(selectedProviderIdx)" :key="m" class="model-chip">
               {{ m }}
-              <button class="chip-remove" @click="removeCustomModel(prov.id, m)" title="Remove">&times;</button>
+              <button class="chip-remove" @click="removeCustomModel(form.providers[selectedProviderIdx].id, m)" title="Remove">&times;</button>
             </span>
           </div>
-          <div v-else style="color: #999; font-size: 0.85em; margin:4px 0;">
-            No models yet. Load from endpoint or add below.
-          </div>
 
-          <!-- Add custom model to this provider -->
-          <div v-if="selectedProviderIdx === idx" class="inline-row" style="margin-top: 6px;">
-            <input v-model="customModelInput" type="text" placeholder="Type model name"
+          <div class="inline-row" style="margin-top: 6px;">
+            <input v-model="customModelInput" type="text" placeholder="Add custom model name"
               @keydown.enter.prevent="addCustomModel" />
             <button class="btn-small btn-add-model" @click="addCustomModel" :disabled="!customModelInput.trim()">Add</button>
           </div>
         </div>
 
-        <!-- Combined model selectors -->
+        <!-- Combined model selectors with source labels -->
         <h3 style="margin: 16px 0 8px; font-size: 1em;">Model Selection</h3>
 
         <div class="row">
           <label>Primary model</label>
           <select v-model="form.primaryModel">
             <option value="">Select model</option>
-            <option v-for="m in allModels()" :key="m" :value="m">{{ m }}</option>
+            <option v-for="m in labeledModels()" :key="m.val" :value="m.val">{{ m.label }}</option>
           </select>
         </div>
 
@@ -700,17 +753,31 @@ async function exportAsCsv() {
           <label>Secondary (verification) model</label>
           <select v-model="form.secondaryModel">
             <option value="">Select model</option>
-            <option v-for="m in allModels()" :key="m" :value="m">{{ m }}</option>
+            <option v-for="m in labeledModels()" :key="m.val" :value="m.val">{{ m.label }}</option>
           </select>
         </div>
 
         <p class="hint" style="margin-top: 8px;">
-          When enabled, the secondary model reviews the primary's response for errors and
-          requests corrections. This loops up to 5 times until the result is satisfactory.
+          When enabled, the secondary model reviews the primary's response for errors
+          and requests corrections. This loops up to 5 times.
         </p>
 
         <p class="status" v-if="statusMsg" style="margin-top: 8px;">{{ statusMsg }}</p>
       </article>
+
+      <!-- Delete confirmation modal -->
+      <Teleport to="body">
+        <div v-if="showDeleteModal" class="modal-overlay" @click.self="showDeleteModal = false">
+          <div class="modal-content modal-sm">
+            <h3>Remove provider?</h3>
+            <p>Are you sure you want to remove <strong>{{ deletingProviderName }}</strong>?</p>
+            <div class="modal-actions">
+              <button @click="showDeleteModal = false">Cancel</button>
+              <button class="btn-danger" @click="doRemoveProvider">Remove</button>
+            </div>
+          </div>
+        </div>
+      </Teleport>
 
       <!-- Appearance -->
       <!-- Appearance -->
@@ -1676,6 +1743,151 @@ code {
 }
 .inline-row input {
   flex: 1;
+}
+
+
+/* ── AI Provider Tabs ─────────────────────────────────────────────────────── */
+.provider-tabs {
+  display: flex;
+  gap: 2px;
+  margin-bottom: 12px;
+  overflow-x: auto;
+  padding-bottom: 2px;
+  flex-wrap: nowrap;
+}
+.provider-tabs .tab-btn {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 14px;
+  border: 1px solid var(--border, #ccc);
+  border-bottom: none;
+  border-radius: 6px 6px 0 0;
+  background: var(--surface-muted, #f0f0f0);
+  color: var(--text-muted, #666);
+  cursor: pointer;
+  font-size: 0.85em;
+  white-space: nowrap;
+  transition: background 0.15s, color 0.15s;
+}
+.provider-tabs .tab-btn.active {
+  background: var(--surface, #fff);
+  color: var(--text, #333);
+  font-weight: 600;
+  border-color: var(--accent, #0077B6);
+}
+.provider-tabs .tab-btn:hover:not(.active) {
+  background: var(--surface-strong, #e8e8e8);
+}
+.tab-label {
+  max-width: 100px;
+  overflow: hidden;
+  text-overflow: ellipsis;
+}
+.tab-close {
+  font-size: 1.1em;
+  line-height: 1;
+  color: #d32f2f;
+  opacity: 0.5;
+  transition: opacity 0.15s;
+  padding: 0 2px;
+}
+.tab-close:hover { opacity: 1; }
+.tab-add {
+  font-weight: 700 !important;
+  font-size: 1.1em !important;
+  padding: 6px 12px !important;
+  border-style: dashed !important;
+  border-color: var(--accent, #0077B6) !important;
+  color: var(--accent, #0077B6) !important;
+}
+.tab-add:hover {
+  background: var(--accent-soft, #cce9f5) !important;
+}
+
+.add-provider-form {
+  padding: 10px;
+  background: var(--surface-muted, #f5f5f5);
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+.add-provider-form .inline-row {
+  display: flex;
+  gap: 6px;
+  flex-wrap: wrap;
+}
+.add-provider-form input {
+  flex: 1;
+  min-width: 100px;
+}
+
+.provider-config {
+  border: 1px solid var(--border, #ddd);
+  border-radius: 6px;
+  padding: 12px;
+  margin-bottom: 12px;
+}
+.provider-config .row {
+  margin-bottom: 8px;
+}
+.provider-config .row input {
+  width: 100%;
+}
+.prov-models {
+  margin: 6px 0;
+}
+.model-chip {
+  display: inline-block;
+  padding: 2px 7px;
+  margin: 2px;
+  background: var(--surface-strong, #e8ecef);
+  border-radius: 4px;
+  font-size: 0.8em;
+  font-family: monospace;
+}
+.chip-remove {
+  background: none;
+  border: none;
+  color: #d32f2f;
+  cursor: pointer;
+  margin-left: 2px;
+  font-weight: bold;
+  padding: 0 2px;
+}
+.inline-row {
+  display: flex;
+  gap: 6px;
+}
+.inline-row input {
+  flex: 1;
+}
+.modal-overlay {
+  position: fixed;
+  top: 0; left: 0; right: 0; bottom: 0;
+  background: rgba(0,0,0,0.4);
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  z-index: 2000;
+}
+.modal-content.modal-sm {
+  max-width: 380px;
+  padding: 20px;
+}
+.modal-actions {
+  display: flex;
+  gap: 8px;
+  justify-content: flex-end;
+  margin-top: 16px;
+}
+.btn-danger {
+  padding: 8px 16px;
+  background: #d32f2f;
+  color: #fff;
+  border: none;
+  border-radius: 5px;
+  cursor: pointer;
+  font-weight: 600;
 }
 
 </style>
