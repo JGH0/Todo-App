@@ -747,7 +747,15 @@ Please provide a corrected version of your response addressing these issues. Ori
         content: 'Sorry, I could not understand that. Please try a simpler request, like "Create a task to buy milk".',
       })
     } else {
-      chatMessages.value.push({ role: 'assistant', content: finalResponse })
+      // Parse the AI's JSON response and execute the plan
+      let plan = null
+      try {
+        plan = typeof finalResponse === 'string' ? JSON.parse(finalResponse) : finalResponse
+      } catch (e) {
+        plan = finalResponse
+      }
+      const result = await executePlan(plan)
+      chatMessages.value.push({ role: 'assistant', content: result })
     }
   } catch (error) {
     console.error(error)
