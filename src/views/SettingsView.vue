@@ -462,9 +462,6 @@ watch(
   { deep: true },
 );
 
-  },
-);
-
 watch(
   () => form.value.useSecondModel,
   (enabled) => {
