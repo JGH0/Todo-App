@@ -312,9 +312,11 @@ function addProvider() {
     models: [],
     customModels: [],
   });
+  selectedProviderIdx.value = form.value.providers.length - 1;
   newProvName.value = "";
   newProvUrl.value = "";
   newProvKey.value = "";
+  showAddForm.value = false;
   saveAiSettings(form.value);
 }
 
@@ -688,7 +690,7 @@ async function exportAsCsv() {
           <button class="tab-btn tab-add" @click="showAddForm = !showAddForm" title="Add provider">+</button>
         </div>
 
-        <!-- Add provider form (blank form) -->
+        <!-- Active provider config (OR add form, never both) -->
         <div v-if="showAddForm" class="add-provider-form">
           <h3 style="margin: 0 0 8px; font-size: 0.95em;">New Provider</h3>
           <div class="row">
@@ -709,8 +711,8 @@ async function exportAsCsv() {
           </div>
         </div>
 
-        <!-- Active provider config -->
-        <div v-if="form.providers[selectedProviderIdx]" class="provider-config">
+        <!-- Active provider config (only when not adding new) -->
+        <div v-if="!showAddForm && form.providers[selectedProviderIdx]" class="provider-config">
           <div class="row">
             <label>Name</label>
             <input v-model="form.providers[selectedProviderIdx].name" type="text" />
