@@ -434,6 +434,11 @@ function extractJsonObject(text) {
 }
 
 async function runChatCompletion(modelId, userText) {
+  // Find the provider for this model to use its base URL and API key
+  const apiSettings = normalizeAiSettings(aiSettings.value)
+  const provider = findProviderForModel(apiSettings, modelId)
+  const baseUrl = provider ? provider.baseUrl : activeApiBaseUrl.value
+
   const messages = [
     { role: 'system', content: 'You are a JSON‑only task planner. Return exactly one valid JSON object. No other text.' },
     { role: 'user', content: buildPlannerPrompt(userText) },
