@@ -829,6 +829,7 @@ onBeforeUnmount(() => {
         />
       </div>
     </article>
+    </div>
 
     <!-- Single action confirmation modal -->
     <Teleport to="body">
