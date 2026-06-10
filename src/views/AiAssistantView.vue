@@ -1204,6 +1204,7 @@ button {
   display: flex;
   align-items: center;
   gap: 8px;
+  margin-right: 140px;
 }
 .new-chat-btn {
   padding: 5px 14px;
