@@ -43,11 +43,15 @@ const batchModalVisible = ref(false)
 let batchResolve = null
 
 const activeConfig = computed(() => getActiveAiConfig(aiSettings.value))
+const activeProvider = computed(() => {
+  const settings = aiSettings.value
+  if (!settings || !settings.providers) return null
+  return settings.providers.find(p => p.id === settings.activeProviderId) || settings.providers[0] || null
+})
 const activeServerUrl = computed(() => normalizeServerUrl(activeConfig.value.serverUrl))
 const activeApiBaseUrl = computed(() => normalizeServerUrl(activeConfig.value.requestBaseUrl))
-const selectedModel = computed(() => aiSettings.value.primaryModel || '')
-const useSecondModel = computed(() => aiSettings.value.useSecondModel)
-const secondaryModel = computed(() => aiSettings.value.secondaryModel || '')
+const activeProviderModel = computed(() => activeProvider.value?.model || '')
+const selectedModel = computed(() => activeProvider.value?.model || '')
 
 const selectedTask = computed(() => tasks.value.find((task) => task.id === selectedTaskId.value) ?? null)
 
@@ -611,8 +615,8 @@ async function sendMessage() {
   try {
     const primaryPlan = await runChatCompletion(selectedModel.value, text)
     let finalPlan = primaryPlan
-    if (useSecondModel.value && secondaryModel.value && secondaryModel.value !== selectedModel.value) {
-      const secondPlan = await runChatCompletion(secondaryModel.value, text)
+    if (false) {
+      const secondPlan = null
       finalPlan = mergePlans(primaryPlan, secondPlan)
     }
     if (!finalPlan) {
@@ -695,8 +699,7 @@ onBeforeUnmount(() => {
           <code v-if="selectedModel">{{ selectedModel }}</code>
           <span v-else>not selected</span>
         </span>
-        <span v-if="useSecondModel && secondaryModel && secondaryModel !== selectedModel" class="config-gap">
-          Second model: <code>{{ secondaryModel }}</code>
+        <span v-if="false" class="config-gap">
         </span>
       </p>
       <div class="messages">

@@ -1,235 +1,281 @@
-export const DEFAULT_AI_SERVER_URL = 'https://ai.hallenbarter.org'
-export const AI_SETTINGS_STORAGE_KEY = 'todo-app.ai-settings'
-export const AI_SETTINGS_EVENT = 'todo-app:ai-settings-updated'
+// ── AI Provider Settings ───────────────────────────────────────────────────
+// Supports multiple AI providers (OpenAI, DeepSeek, Anthropic, Google, Ollama,
+// custom) each with its own API key, base URL, and model selection.
 
-const defaultAiSettings = {
-  useDefaultServer: true,
-  defaultServerUrl: DEFAULT_AI_SERVER_URL,
-  defaultApiUrl: '',
-  defaultApiKey: '',
-  customServerUrl: '',
-  customApiUrl: '',
-  customApiKey: '',
-  models: [],
-  primaryModel: '',
-  useSecondModel: false,
-  secondaryModel: '',
+export const DEFAULT_AI_SERVER_URL = "https://ai.hallenbarter.org"
+
+export const AI_SETTINGS_STORAGE_KEY = "todo-app.ai-settings"
+export const AI_SETTINGS_EVENT = "todo-app:ai-settings-updated"
+
+// Built-in provider presets
+export const PROVIDER_PRESETS = [
+	{
+		id: "openai",
+		name: "OpenAI",
+		baseUrl: "https://api.openai.com/v1",
+		supportsModels: true,
+		models: ["gpt-4o", "gpt-4o-mini", "gpt-4-turbo", "gpt-3.5-turbo"],
+	},
+	{
+		id: "deepseek",
+		name: "DeepSeek",
+		baseUrl: "https://api.deepseek.com",
+		supportsModels: true,
+		models: ["deepseek-chat", "deepseek-reasoner"],
+	},
+	{
+		id: "anthropic",
+		name: "Anthropic",
+		baseUrl: "https://api.anthropic.com",
+		supportsModels: true,
+		models: ["claude-3-opus-20240229", "claude-3-sonnet-20240229", "claude-3-haiku-20240307", "claude-3-5-sonnet-20240620"],
+	},
+	{
+		id: "google",
+		name: "Google AI",
+		baseUrl: "https://generativelanguage.googleapis.com/v1beta/openai",
+		supportsModels: true,
+		models: ["gemini-2.0-flash", "gemini-2.0-pro", "gemini-1.5-pro", "gemini-1.5-flash"],
+	},
+	{
+		id: "ollama",
+		name: "Ollama (Local)",
+		baseUrl: "http://localhost:11434",
+		supportsModels: true,
+		models: [],
+	},
+	{
+		id: "custom",
+		name: "Custom",
+		baseUrl: "",
+		supportsModels: true,
+		models: [],
+	},
+]
+
+function generateId() {
+	return "prov_" + Math.random().toString(36).substring(2, 10)
 }
 
-function normalizeModelOption(model) {
-  if (!model) return null
-
-  if (typeof model === 'string') {
-    const value = model.trim()
-    return value ? { id: value, label: value } : null
-  }
-
-  const id = String(model.id || model.model || model.name || '').trim()
-  if (!id) return null
-
-  const label = String(model.label || model.name || model.id || model.model || '').trim() || id
-  return { id, label }
+const defaultSettings = {
+	providers: [
+		{
+			id: generateId(),
+			preset: "openai",
+			name: "OpenAI",
+			baseUrl: "https://api.openai.com/v1",
+			apiKey: "",
+			model: "",
+			customModels: [],
+		},
+	],
+	activeProviderId: null,
 }
 
-export function normalizeServerUrl(value) {
-  return typeof value === 'string' ? value.trim().replace(/\/+$/, '') : ''
-}
-
-function joinUrl(baseUrl, suffix) {
-  const base = normalizeServerUrl(baseUrl)
-  if (!base) return ''
-  return `${base}${suffix.startsWith('/') ? suffix : `/${suffix}`}`
-}
-
-function getUrlPathname(url) {
-  try {
-    return new URL(url).pathname.replace(/\/+$/, '') || '/'
-  } catch {
-    return '/'
-  }
-}
-
-function getUrlOrigin(url) {
-  try {
-    return new URL(url).origin
-  } catch {
-    return ''
-  }
-}
-
-function dedupeUrls(urls) {
-  return [...new Set(urls.map((url) => normalizeServerUrl(url)).filter(Boolean))]
-}
-
-function isApiBasePath(pathname) {
-  const lower = pathname.toLowerCase()
-  return lower.endsWith('/api') || /\/v\d[^/]*$/.test(lower) || lower.includes('/openai')
-}
-
-export function buildModelsEndpointCandidates(baseUrl) {
-  const normalizedBaseUrl = normalizeServerUrl(baseUrl)
-  if (!normalizedBaseUrl) return []
-
-  const pathname = getUrlPathname(normalizedBaseUrl)
-  const lowerPath = pathname.toLowerCase()
-  const origin = getUrlOrigin(normalizedBaseUrl)
-  const candidates = []
-
-  if (/(\/models|\/api\/models|\/api\/tags|\/v\d[^/]*\/models)$/.test(lowerPath)) {
-    candidates.push(normalizedBaseUrl)
-  }
-
-  if (isApiBasePath(pathname)) {
-    candidates.push(joinUrl(normalizedBaseUrl, '/models'))
-    candidates.push(joinUrl(normalizedBaseUrl, '/tags'))
-  } else {
-    candidates.push(joinUrl(normalizedBaseUrl, '/api/models'))
-    candidates.push(joinUrl(normalizedBaseUrl, '/v1/models'))
-    candidates.push(joinUrl(normalizedBaseUrl, '/models'))
-    candidates.push(joinUrl(normalizedBaseUrl, '/api/tags'))
-  }
-
-  if (origin && origin !== normalizedBaseUrl) {
-    candidates.push(joinUrl(origin, '/api/models'))
-    candidates.push(joinUrl(origin, '/v1/models'))
-    candidates.push(joinUrl(origin, '/models'))
-    candidates.push(joinUrl(origin, '/api/tags'))
-  }
-
-  return dedupeUrls(candidates)
-}
-
-export function buildOpenAiChatEndpointCandidates(baseUrl) {
-  const normalizedBaseUrl = normalizeServerUrl(baseUrl)
-  if (!normalizedBaseUrl) return []
-
-  const pathname = getUrlPathname(normalizedBaseUrl)
-  const lowerPath = pathname.toLowerCase()
-  const origin = getUrlOrigin(normalizedBaseUrl)
-  const candidates = []
-
-  if (/(\/chat\/completions|\/api\/chat\/completions|\/v\d[^/]*\/chat\/completions)$/.test(lowerPath)) {
-    candidates.push(normalizedBaseUrl)
-  }
-
-  if (isApiBasePath(pathname)) {
-    candidates.push(joinUrl(normalizedBaseUrl, '/chat/completions'))
-    candidates.push(joinUrl(normalizedBaseUrl, '/chat'))
-  } else {
-    candidates.push(joinUrl(normalizedBaseUrl, '/api/chat/completions'))
-    candidates.push(joinUrl(normalizedBaseUrl, '/v1/chat/completions'))
-    candidates.push(joinUrl(normalizedBaseUrl, '/chat/completions'))
-    candidates.push(joinUrl(normalizedBaseUrl, '/api/chat'))
-  }
-
-  if (origin && origin !== normalizedBaseUrl) {
-    candidates.push(joinUrl(origin, '/api/chat/completions'))
-    candidates.push(joinUrl(origin, '/v1/chat/completions'))
-    candidates.push(joinUrl(origin, '/chat/completions'))
-    candidates.push(joinUrl(origin, '/api/chat'))
-  }
-
-  return dedupeUrls(candidates)
-}
-
-export function buildOllamaChatEndpointCandidates(baseUrl) {
-  const normalizedBaseUrl = normalizeServerUrl(baseUrl)
-  if (!normalizedBaseUrl) return []
-
-  const pathname = getUrlPathname(normalizedBaseUrl)
-  const lowerPath = pathname.toLowerCase()
-  const origin = getUrlOrigin(normalizedBaseUrl)
-  const candidates = []
-
-  if (/(\/api\/chat|\/chat)$/.test(lowerPath)) {
-    candidates.push(normalizedBaseUrl)
-  }
-
-  if (isApiBasePath(pathname)) {
-    candidates.push(joinUrl(normalizedBaseUrl, '/chat'))
-  } else {
-    candidates.push(joinUrl(normalizedBaseUrl, '/api/chat'))
-    candidates.push(joinUrl(normalizedBaseUrl, '/chat'))
-  }
-
-  if (origin && origin !== normalizedBaseUrl) {
-    candidates.push(joinUrl(origin, '/api/chat'))
-    candidates.push(joinUrl(origin, '/chat'))
-  }
-
-  return dedupeUrls(candidates)
-}
-
-export function parseModels(payload) {
-  const candidates = Array.isArray(payload) ? payload : payload?.data || payload?.models || []
-  if (!Array.isArray(candidates)) return []
-
-  return candidates.map(normalizeModelOption).filter(Boolean)
+function normalizeProvider(provider = {}) {
+	return {
+		id: provider.id || generateId(),
+		preset: provider.preset || "",
+		name: provider.name || "AI Provider",
+		baseUrl: typeof provider.baseUrl === "string" ? provider.baseUrl.trim().replace(/\/+$/, "") : "",
+		apiKey: typeof provider.apiKey === "string" ? provider.apiKey : "",
+		model: typeof provider.model === "string" ? provider.model : "",
+		customModels: Array.isArray(provider.customModels) ? provider.customModels.filter(Boolean) : [],
+	}
 }
 
 export function normalizeAiSettings(settings = {}) {
-  const merged = { ...defaultAiSettings, ...(settings || {}) }
-  const models = Array.isArray(merged.models)
-    ? merged.models.map(normalizeModelOption).filter(Boolean)
-    : []
+	if (!settings || typeof settings !== "object") {
+		return JSON.parse(JSON.stringify(defaultSettings))
+	}
 
-  return {
-    useDefaultServer: Boolean(merged.useDefaultServer),
-    defaultServerUrl: normalizeServerUrl(merged.defaultServerUrl) || DEFAULT_AI_SERVER_URL,
-    defaultApiUrl: normalizeServerUrl(merged.defaultApiUrl),
-    defaultApiKey: typeof merged.defaultApiKey === 'string' ? merged.defaultApiKey : '',
-    customServerUrl: normalizeServerUrl(merged.customServerUrl),
-    customApiUrl: normalizeServerUrl(merged.customApiUrl),
-    customApiKey: typeof merged.customApiKey === 'string' ? merged.customApiKey : '',
-    models,
-    primaryModel: typeof merged.primaryModel === 'string' ? merged.primaryModel : '',
-    useSecondModel: Boolean(merged.useSecondModel),
-    secondaryModel: typeof merged.secondaryModel === 'string' ? merged.secondaryModel : '',
-  }
+	const providers = Array.isArray(settings.providers)
+		? settings.providers.map(normalizeProvider).filter((p) => p.name.trim())
+		: []
+
+	if (providers.length === 0) {
+		providers.push(normalizeProvider(defaultSettings.providers[0]))
+	}
+
+	let activeProviderId = settings.activeProviderId || null
+	if (activeProviderId && !providers.find((p) => p.id === activeProviderId)) {
+		activeProviderId = providers[0].id
+	}
+	if (!activeProviderId) {
+		activeProviderId = providers[0].id
+	}
+
+	return { providers, activeProviderId }
 }
 
-export function getActiveAiConfig(settings = {}) {
-  const normalized = normalizeAiSettings(settings)
-  const source = normalized.useDefaultServer ? 'default' : 'custom'
-  const serverUrl = source === 'default' ? normalized.defaultServerUrl : normalized.customServerUrl
-  const apiUrl = source === 'default' ? normalized.defaultApiUrl : normalized.customApiUrl
-  const apiKey = source === 'default' ? normalized.defaultApiKey.trim() : normalized.customApiKey.trim()
+export function getActiveProvider(settings = {}) {
+	const normalized = normalizeAiSettings(settings)
+	return normalized.providers.find((p) => p.id === normalized.activeProviderId) || normalized.providers[0] || null
+}
 
-  return {
-    source,
-    serverUrl,
-    apiUrl,
-    requestBaseUrl: apiUrl || serverUrl,
-    apiKey,
-  }
+export function getProviderModels(provider) {
+	if (!provider) return []
+	const preset = PROVIDER_PRESETS.find((p) => p.id === provider.preset)
+	const presetModels = preset?.models || []
+	const all = [...new Set([...presetModels, ...(provider.customModels || [])])]
+	return all
 }
 
 export function loadAiSettings() {
-  if (typeof window === 'undefined') {
-    return normalizeAiSettings()
-  }
-
-  try {
-    const raw = window.localStorage.getItem(AI_SETTINGS_STORAGE_KEY)
-    return raw ? normalizeAiSettings(JSON.parse(raw)) : normalizeAiSettings()
-  } catch {
-    return normalizeAiSettings()
-  }
+	if (typeof window === "undefined") return normalizeAiSettings()
+	try {
+		const raw = window.localStorage.getItem(AI_SETTINGS_STORAGE_KEY)
+		return raw ? normalizeAiSettings(JSON.parse(raw)) : normalizeAiSettings()
+	} catch {
+		return normalizeAiSettings()
+	}
 }
 
 export function saveAiSettings(settings = {}) {
-  const normalized = normalizeAiSettings(settings)
-
-  if (typeof window === 'undefined') {
-    return normalized
-  }
-
-  try {
-    window.localStorage.setItem(AI_SETTINGS_STORAGE_KEY, JSON.stringify(normalized))
-    window.dispatchEvent(new CustomEvent(AI_SETTINGS_EVENT, { detail: normalized }))
-  } catch (error) {
-    console.error('Unable to save AI settings locally.', error)
-  }
-
-  return normalized
+	const normalized = normalizeAiSettings(settings)
+	if (typeof window !== "undefined") {
+		try {
+			window.localStorage.setItem(AI_SETTINGS_STORAGE_KEY, JSON.stringify(normalized))
+			window.dispatchEvent(new CustomEvent(AI_SETTINGS_EVENT, { detail: normalized }))
+		} catch (error) {
+			console.error("Unable to save AI settings.", error)
+		}
+	}
+	return normalized
 }
+
+// ── Endpoint / request helpers ──────────────────────────────────────────────
+
+function normalizeUrl(value) {
+	return typeof value === "string" ? value.trim().replace(/\/+$/, "") : ""
+}
+
+function getUrlOrigin(url) {
+	try {
+		return new URL(url).origin
+	} catch {
+		return ""
+	}
+}
+
+function getUrlPathname(url) {
+	try {
+		return new URL(url).pathname.replace(/\/+$/, "") || "/"
+	} catch {
+		return "/"
+	}
+}
+
+function isApiBasePath(pathname) {
+	const lower = pathname.toLowerCase()
+	return lower.endsWith("/api") || /\/v\d[^/]*$/.test(lower) || lower.includes("/openai")
+}
+
+function dedupeUrls(urls) {
+	return [...new Set(urls.map((url) => normalizeUrl(url)).filter(Boolean))]
+}
+
+function joinUrl(base, suffix) {
+	const b = normalizeUrl(base)
+	if (!b) return ""
+	return `${b}${suffix.startsWith("/") ? suffix : `/${suffix}`}`
+}
+
+export function buildModelsEndpointCandidates(baseUrl) {
+	const url = normalizeUrl(baseUrl)
+	if (!url) return []
+	const pathname = getUrlPathname(url)
+	const lowerPath = pathname.toLowerCase()
+	const origin = getUrlOrigin(url)
+	const candidates = []
+
+	if (/(\/models|\/api\/models|\/api\/tags|\/v\d[^/]*\/models)$/.test(lowerPath)) {
+		candidates.push(url)
+	}
+
+	if (isApiBasePath(pathname)) {
+		candidates.push(joinUrl(url, "/models"))
+		candidates.push(joinUrl(url, "/tags"))
+	} else {
+		candidates.push(joinUrl(url, "/api/models"))
+		candidates.push(joinUrl(url, "/v1/models"))
+		candidates.push(joinUrl(url, "/models"))
+		candidates.push(joinUrl(url, "/api/tags"))
+	}
+
+	if (origin && origin !== url) {
+		candidates.push(joinUrl(origin, "/api/models"))
+		candidates.push(joinUrl(origin, "/v1/models"))
+		candidates.push(joinUrl(origin, "/models"))
+		candidates.push(joinUrl(origin, "/api/tags"))
+	}
+
+	return dedupeUrls(candidates)
+}
+
+export function buildChatEndpoint(baseUrl) {
+	const url = normalizeUrl(baseUrl)
+	if (!url) return ""
+	return joinUrl(url, "/chat/completions")
+}
+
+export function parseModels(payload) {
+	const candidates = Array.isArray(payload) ? payload : payload?.data || payload?.models || []
+	if (!Array.isArray(candidates)) return []
+	return candidates
+		.map((m) => {
+			if (!m) return null
+			if (typeof m === "string") return m.trim() || null
+			return String(m.id || m.model || m.name || "").trim() || null
+		})
+		.filter(Boolean)
+}
+
+// ── Legacy backward compatibility ──────────────────────────────────────────
+// For AiAssistantView which uses getActiveAiConfig() and related helpers
+export function getActiveAiConfig() {
+	const settings = loadAiSettings()
+	const provider = getActiveProvider(settings)
+	if (!provider) return { source: "", serverUrl: "", apiUrl: "", requestBaseUrl: "", apiKey: "" }
+
+	return {
+		source: provider.preset || provider.name,
+		serverUrl: provider.baseUrl,
+		apiUrl: provider.baseUrl,
+		requestBaseUrl: provider.baseUrl,
+		apiKey: provider.apiKey,
+	}
+}
+
+export function buildOpenAiChatEndpointCandidates(baseUrl) {
+	return [buildChatEndpoint(baseUrl)].filter(Boolean)
+}
+
+export function buildOllamaChatEndpointCandidates(baseUrl) {
+	const url = normalizeUrl(baseUrl)
+	if (!url) return []
+	const pathname = getUrlPathname(url)
+	const lowerPath = pathname.toLowerCase()
+	const origin = getUrlOrigin(url)
+	const candidates = []
+
+	if (/(\/api\/chat|\/chat)$/.test(lowerPath)) {
+		candidates.push(url)
+	}
+
+	if (isApiBasePath(pathname)) {
+		candidates.push(joinUrl(url, "/chat"))
+	} else {
+		candidates.push(joinUrl(url, "/api/chat"))
+		candidates.push(joinUrl(url, "/chat"))
+	}
+
+	if (origin && origin !== url) {
+		candidates.push(joinUrl(origin, "/api/chat"))
+		candidates.push(joinUrl(origin, "/chat"))
+	}
+
+	return dedupeUrls(candidates)
+}
+
+export { normalizeUrl as normalizeServerUrl }
