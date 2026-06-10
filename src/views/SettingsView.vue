@@ -1910,8 +1910,8 @@ code {
 .modal-content.modal-sm {
   max-width: 380px;
   padding: 24px;
-  background: var(--surface, #fff);
-  border: 1px solid var(--border, #ddd);
+  background: #fff;
+  border: 1px solid #ddd;
   border-radius: 10px;
   box-shadow: 0 8px 32px rgba(0,0,0,0.18);
 }
