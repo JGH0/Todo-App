@@ -688,13 +688,24 @@ async function exportAsCsv() {
           <button class="tab-btn tab-add" @click="showAddForm = !showAddForm" title="Add provider">+</button>
         </div>
 
-        <!-- Add provider form (collapsible) -->
+        <!-- Add provider form (blank form) -->
         <div v-if="showAddForm" class="add-provider-form">
-          <div class="inline-row">
-            <input v-model="newProvName" type="text" placeholder="Name (e.g. DeepSeek)" />
+          <h3 style="margin: 0 0 8px; font-size: 0.95em;">New Provider</h3>
+          <div class="row">
+            <label>Name</label>
+            <input v-model="newProvName" type="text" placeholder="e.g. DeepSeek" />
+          </div>
+          <div class="row">
+            <label>Base URL</label>
             <input v-model="newProvUrl" type="url" placeholder="https://api.deepseek.com" />
-            <input v-model="newProvKey" type="password" placeholder="API key" autocomplete="off" />
-            <button class="btn-add" @click="addProvider" :disabled="!newProvUrl.trim() || !newProvName.trim()">Add</button>
+          </div>
+          <div class="row">
+            <label>API Key</label>
+            <input v-model="newProvKey" type="password" placeholder="sk-..." autocomplete="off" />
+          </div>
+          <div class="actions" style="margin-top: 8px;">
+            <button @click="addProvider" :disabled="!newProvUrl.trim() || !newProvName.trim()">Add Provider</button>
+            <button class="btn-cancel" @click="showAddForm = false">Cancel</button>
           </div>
         </div>
 
@@ -1625,7 +1636,17 @@ code {
   color: var(--accent, #0077B6);
   font-weight: 600;
 }
-.btn-small.btn-danger {
+.btn-small.btn-cancel {
+  padding: 8px 16px;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 5px;
+  background: var(--surface, #fff);
+  color: var(--text, #333);
+  cursor: pointer;
+  font-weight: 600;
+}
+
+.btn-danger {
   border-color: #d32f2f;
   color: #d32f2f;
 }
@@ -1747,6 +1768,24 @@ code {
 
 
 /* ── AI Provider Tabs ─────────────────────────────────────────────────────── */
+.add-provider-form {
+  padding: 12px;
+  background: var(--surface-muted, #f5f5f5);
+  border: 1px solid var(--border, #ddd);
+  border-radius: 6px;
+  margin-bottom: 12px;
+}
+.add-provider-form .row {
+  margin-bottom: 8px;
+}
+.add-provider-form .row input {
+  width: 100%;
+}
+.add-provider-form .actions {
+  display: flex;
+  gap: 8px;
+}
+
 .provider-tabs {
   display: flex;
   gap: 2px;
@@ -1785,14 +1824,25 @@ code {
   text-overflow: ellipsis;
 }
 .tab-close {
-  font-size: 1.1em;
-  line-height: 1;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  width: 20px;
+  height: 20px;
+  border-radius: 4px;
+  border: 1px solid #d32f2f;
+  background: transparent;
   color: #d32f2f;
-  opacity: 0.5;
-  transition: opacity 0.15s;
-  padding: 0 2px;
+  font-size: 1em;
+  line-height: 1;
+  cursor: pointer;
+  transition: background 0.15s, color 0.15s;
+  margin-left: 4px;
 }
-.tab-close:hover { opacity: 1; }
+.tab-close:hover {
+  background: #d32f2f;
+  color: #fff;
+}
 .tab-add {
   font-weight: 700 !important;
   font-size: 1.1em !important;
@@ -1805,21 +1855,6 @@ code {
   background: var(--accent-soft, #cce9f5) !important;
 }
 
-.add-provider-form {
-  padding: 10px;
-  background: var(--surface-muted, #f5f5f5);
-  border-radius: 6px;
-  margin-bottom: 12px;
-}
-.add-provider-form .inline-row {
-  display: flex;
-  gap: 6px;
-  flex-wrap: wrap;
-}
-.add-provider-form input {
-  flex: 1;
-  min-width: 100px;
-}
 
 .provider-config {
   border: 1px solid var(--border, #ddd);
@@ -1880,6 +1915,16 @@ code {
   justify-content: flex-end;
   margin-top: 16px;
 }
+.btn-cancel {
+  padding: 8px 16px;
+  border: 1px solid var(--border, #ccc);
+  border-radius: 5px;
+  background: var(--surface, #fff);
+  color: var(--text, #333);
+  cursor: pointer;
+  font-weight: 600;
+}
+
 .btn-danger {
   padding: 8px 16px;
   background: #d32f2f;
